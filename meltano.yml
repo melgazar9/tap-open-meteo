@@ -1,0 +1,150 @@
+version: 1
+send_anonymous_usage_stats: false
+project_id: "tap-open-mateo"
+default_environment: test
+environments:
+- name: test
+
+plugins:
+  extractors:
+  - name: tap-open-mateo
+    namespace: tap_open_mateo
+    pip_url: -e .
+    capabilities:
+      - state
+      - catalog
+      - discover
+      - about
+      - stream-maps
+    settings:
+      - name: api_key
+        kind: password
+        sensitive: true
+        description: Open-Meteo API key for paid tier. If omitted, only Forecast API available.
+
+      - name: locations
+        kind: array
+        description: List of locations to query. Each object requires name, latitude, longitude.
+
+      - name: location_presets
+        kind: string
+        description: "Shortcut: 'us_population_centers' or 'energy_hubs'. Overrides locations."
+
+      - name: hourly_variables
+        kind: array
+        description: Hourly variables to request from the API.
+
+      - name: daily_variables
+        kind: array
+        description: Daily variables to request from the API.
+
+      - name: models
+        kind: array
+        description: Weather models to query for forecast/historical.
+
+      - name: ensemble_models
+        kind: array
+        description: Ensemble models to query.
+
+      - name: climate_models
+        kind: array
+        description: CMIP6 climate models to query.
+
+      - name: temperature_unit
+        kind: string
+        description: "Temperature unit: 'celsius' or 'fahrenheit'."
+
+      - name: wind_speed_unit
+        kind: string
+        description: "Wind speed unit: 'kmh', 'ms', 'mph', 'kn'."
+
+      - name: precipitation_unit
+        kind: string
+        description: "Precipitation unit: 'mm' or 'inch'."
+
+      - name: timezone
+        kind: string
+        description: IANA timezone for daily aggregation.
+
+      - name: forecast_days
+        kind: integer
+        description: Forecast horizon in days (max 16).
+
+      - name: past_days
+        kind: integer
+        description: How many past days to include in forecast requests.
+
+      - name: previous_run_days
+        kind: array
+        description: Which _previous_dayN suffixes to request.
+
+      - name: historical_start_date
+        kind: date_iso8601
+        description: Start date for Historical API.
+
+      - name: historical_end_date
+        kind: date_iso8601
+        description: End date for Historical API. Defaults to yesterday.
+
+      - name: historical_chunk_days
+        kind: integer
+        description: Days per Historical API request chunk.
+
+      - name: climate_start_date
+        kind: date_iso8601
+        description: Climate API start date.
+
+      - name: climate_end_date
+        kind: date_iso8601
+        description: Climate API end date.
+
+      - name: enabled_endpoints
+        kind: array
+        description: "Which endpoints to extract: forecast, historical, ensemble, previous_runs, climate."
+
+      - name: max_requests_per_minute
+        kind: integer
+        description: Maximum API requests per minute.
+
+      - name: min_throttle_seconds
+        kind: number
+        description: Minimum seconds between consecutive requests.
+
+      - name: max_locations_per_request
+        kind: integer
+        description: Batch locations into multi-location requests.
+
+      - name: strict_mode
+        kind: boolean
+        description: If true, raise on API errors instead of skipping partitions.
+
+    select:
+      - forecast_hourly.*
+      - forecast_daily.*
+      - historical_hourly.*
+      - historical_daily.*
+      - ensemble_hourly.*
+      - previous_runs_hourly.*
+      - climate_daily.*
+
+    config:
+      api_key: $OPEN_METEO_API_KEY
+      location_presets: "us_population_centers"
+      temperature_unit: "fahrenheit"
+      wind_speed_unit: "mph"
+      precipitation_unit: "inch"
+      timezone: "America/Chicago"
+      forecast_days: 16
+      past_days: 7
+      previous_run_days: [1, 2, 3, 5, 7]
+      historical_start_date: "2020-01-01"
+      historical_chunk_days: 365
+      enabled_endpoints: ["forecast", "historical", "ensemble", "previous_runs"]
+      ensemble_models: ["gfs025"]
+      max_locations_per_request: 10
+      max_requests_per_minute: 500
+
+  loaders:
+  - name: target-jsonl
+    variant: andyh1203
+    pip_url: target-jsonl
