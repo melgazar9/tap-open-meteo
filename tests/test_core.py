@@ -297,3 +297,125 @@ def test_batch_locations_uneven():
     assert len(batches[0]) == 5
     assert len(batches[1]) == 5
     assert len(batches[2]) == 3
+
+
+# --- Ensemble granularity parameter tests ---
+
+
+def test_pivot_ensemble_custom_granularity():
+    """Verify ensemble pivot respects custom granularity parameter."""
+    section_data = {
+        "time": ["2026-03-09T00:00", "2026-03-09T06:00"],
+        "temperature_2m": [6.7, 6.2],
+        "temperature_2m_member01": [6.5, 6.0],
+    }
+
+    records = pivot_ensemble_to_rows(
+        section_data=section_data,
+        times=section_data["time"],
+        base_variables=["temperature_2m"],
+        location_name="Test",
+        latitude=0.0,
+        longitude=0.0,
+        elevation=None,
+        model="ecmwf_seasonal_seamless",
+        granularity="six_hourly",
+    )
+
+    assert len(records) == 4  # 2 timestamps x 2 members
+    assert all(r["granularity"] == "six_hourly" for r in records)
+
+
+def test_pivot_ensemble_default_granularity():
+    """Verify ensemble pivot defaults to 'hourly' granularity."""
+    section_data = {
+        "time": ["2026-03-09T00:00"],
+        "temperature_2m": [6.7],
+    }
+
+    records = pivot_ensemble_to_rows(
+        section_data=section_data,
+        times=section_data["time"],
+        base_variables=["temperature_2m"],
+        location_name="Test",
+        latitude=0.0,
+        longitude=0.0,
+        elevation=None,
+        model="gfs025",
+    )
+
+    assert len(records) == 1
+    assert records[0]["granularity"] == "hourly"
+
+
+# --- New endpoint discovery tests ---
+
+
+def test_tap_discover_all_endpoints():
+    """Verify all endpoint streams appear when enabled."""
+    config = {
+        **SAMPLE_CONFIG,
+        "enabled_endpoints": [
+            "forecast", "historical", "historical_forecast",
+            "ensemble", "previous_runs", "seasonal", "marine",
+            "air_quality", "flood", "climate", "elevation",
+        ],
+        "historical_start_date": "2024-01-01",
+        "historical_forecast_start_date": "2024-01-01",
+    }
+    tap = TapOpenMateo(config=config)
+    streams = tap.discover_streams()
+    stream_names = {s.name for s in streams}
+
+    expected = {
+        "forecast_hourly", "forecast_daily",
+        "historical_hourly", "historical_daily",
+        "historical_forecast_hourly", "historical_forecast_daily",
+        "ensemble_hourly", "previous_runs_hourly",
+        "seasonal_six_hourly", "seasonal_daily",
+        "marine_hourly", "marine_daily",
+        "air_quality_hourly",
+        "flood_daily",
+        "climate_daily",
+        "elevation",
+    }
+    assert expected == stream_names
+
+
+def test_tap_discover_geocoding():
+    """Verify geocoding stream requires search_terms to be configured."""
+    # Without search terms, geocoding should not appear
+    config = {
+        **SAMPLE_CONFIG,
+        "enabled_endpoints": ["geocoding"],
+    }
+    tap = TapOpenMateo(config=config)
+    streams = tap.discover_streams()
+    stream_names = {s.name for s in streams}
+    assert "geocoding" not in stream_names
+
+    # With search terms, geocoding should appear
+    config["geocoding_search_terms"] = ["Berlin", "Tokyo"]
+    tap = TapOpenMateo(config=config)
+    streams = tap.discover_streams()
+    stream_names = {s.name for s in streams}
+    assert "geocoding" in stream_names
+
+
+def test_tap_discover_satellite_requires_dates():
+    """Verify satellite streams require start_date to be configured."""
+    config = {
+        **SAMPLE_CONFIG,
+        "enabled_endpoints": ["satellite"],
+    }
+    tap = TapOpenMateo(config=config)
+    streams = tap.discover_streams()
+    stream_names = {s.name for s in streams}
+    assert "satellite_radiation_hourly" not in stream_names
+
+    config["satellite_start_date"] = "2024-01-01"
+    tap = TapOpenMateo(config=config)
+    streams = tap.discover_streams()
+    stream_names = {s.name for s in streams}
+    assert "satellite_radiation_hourly" in stream_names
+    assert "satellite_radiation_daily" in stream_names

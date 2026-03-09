@@ -1,300 +1,100 @@
-# AGENTS.md - AI Agent Development Guide for tap-open-mateo
+# CLAUDE.md - AI Agent Development Guide for tap-open-mateo
 
-This document provides guidance for AI coding agents and developers working on this Singer tap.
+## Coding Standards (MUST FOLLOW)
+
+- **Documentation-driven**: All decisions must follow official API documentation. Do NOT guess. Verify against live docs (Open-Meteo, Meltano SDK). If uncertain, say "I don't know" rather than produce something wrong.
+- **Minimal loops**: Prefer list/dict comprehensions and vectorized operations over `for`/`while` loops. Only use explicit loops when necessary.
+- **DRY / OOP / SOLID**: Eliminate code duplication aggressively. Use base class methods, shared schemas, and helper functions. Check the whole codebase for duplication.
+- **Naming conventions**: Names must be extremely clear and self-documenting. You should know exactly what a function/method/class does just by reading its name. No vague names like "temp_stream" or "process_data".
+- **Keep tap.py, meltano.yml, and .env.example in sync**: When adding/removing config properties, update all three files together.
+- **Reference taps**: Follow patterns from `../tap-fred`, `../tap-fmp`, `../tap-massive`, `../tap-yfinance` for architecture decisions.
 
 ## Project Overview
 
-- **Project Type**: Singer Tap
-- **Source**: OpenMateo
-- **Stream Type**: REST
-- **Authentication**: Custom or N/A
-- **Framework**: Meltano Singer SDK
+- **Project Type**: Singer Tap (Meltano SDK v0.53.5)
+- **Source**: Open-Meteo (all 13 API endpoints)
+- **Authentication**: API key in query params (paid tier) or none (free tier)
+- **No pagination**: All endpoints return full time series in one response (use `SinglePagePaginator`)
 
 ## Architecture
 
-This tap follows the Singer specification and uses the Meltano Singer SDK to extract data from OpenMateo.
-
 ### Key Components
 
-1. **Tap Class** (`tap_open_mateo/tap.py`): Main entry point, defines streams and configuration
-1. **Client** (`tap_open_mateo/client.py`): Handles API communication and authentication
-1. **Streams** (`tap_open_mateo/streams.py`): Define data streams and their schemas
-   ## Development Guidelines for AI Agents
+1. **Tap Class** (`tap_open_mateo/tap.py`): Config schema (~44 properties), location presets, stream discovery gated by `enabled_endpoints`
+2. **Base Client** (`tap_open_mateo/client.py`): `OpenMateoStream(RESTStream, ABC)` — rate limiting, backoff, param builders, response extraction, post_process
+3. **Helpers** (`tap_open_mateo/helpers.py`): Columnar-to-row pivoting, ensemble member normalization, previous runs normalization, surrogate key generation
+4. **Streams** (`tap_open_mateo/streams/`): 19 stream classes across 11 files
 
-### Understanding Singer Concepts
+### Stream Files
 
-Before making changes, ensure you understand these Singer concepts:
-
-- **Streams**: Individual data endpoints (e.g., users, orders, transactions)
-- **State**: Tracks incremental sync progress using bookmarks
-- **Catalog**: Metadata about available streams and their schemas
-- **Records**: Individual data items emitted by the tap
-- **Schemas**: JSON Schema definitions for stream data
-
-### Common Tasks
-
-#### Adding a New Stream
-
-1. Define stream class in `tap_open_mateo/streams.py`
-1. Set `name`, `path`, `primary_keys`, and `replication_key` (set this to `None` if not applicable)
-1. Define schema using `PropertiesList` or JSON Schema
-1. Register stream in the tap's `discover_streams()` method
-
-Example:
-
-```python
-class MyNewStream(OpenMateoStream):
-    name = "my_new_stream"
-    path = "/api/v1/my_resource"
-    primary_keys = ["id"]
-    replication_key = "updated_at"
-
-    schema = PropertiesList(
-        Property("id", StringType, required=True),
-        Property("name", StringType),
-        Property("updated_at", DateTimeType),
-    ).to_dict()
+```
+streams/
+├── __init__.py                    # Re-exports all 19 stream classes
+├── forecast_streams.py            # ForecastHourly, ForecastDaily, PreviousRunsHourly
+├── historical_streams.py          # HistoricalHourly, HistoricalDaily (ERA5)
+├── historical_forecast_streams.py # HistoricalForecastHourly, HistoricalForecastDaily
+├── ensemble_streams.py            # EnsembleHourly
+├── seasonal_streams.py            # SeasonalSixHourly, SeasonalDaily
+├── climate_streams.py             # ClimateDaily (CMIP6)
+├── marine_streams.py              # MarineHourly, MarineDaily
+├── air_quality_streams.py         # AirQualityHourly
+├── satellite_streams.py           # SatelliteRadiationHourly, SatelliteRadiationDaily
+├── flood_streams.py               # FloodDaily
+└── utility_streams.py             # Geocoding, Elevation
 ```
 
-#### Modifying Authentication
+### Open-Meteo API Endpoints (all 13)
 
-#### Handling Pagination
+| Endpoint | Base URL | Streams |
+|----------|----------|---------|
+| Forecast | `api.open-meteo.com/v1/forecast` | forecast_hourly, forecast_daily |
+| Historical (ERA5) | `archive-api.open-meteo.com/v1/archive` | historical_hourly, historical_daily |
+| Historical Forecast | `historical-forecast-api.open-meteo.com/v1/forecast` | historical_forecast_hourly, historical_forecast_daily |
+| Previous Runs | `previous-runs-api.open-meteo.com/v1/forecast` | previous_runs_hourly |
+| Ensemble | `ensemble-api.open-meteo.com/v1/ensemble` | ensemble_hourly |
+| Seasonal | `seasonal-api.open-meteo.com/v1/seasonal` | seasonal_six_hourly, seasonal_daily |
+| Climate (CMIP6) | `climate-api.open-meteo.com/v1/climate` | climate_daily |
+| Marine | `marine-api.open-meteo.com/v1/marine` | marine_hourly, marine_daily |
+| Air Quality | `air-quality-api.open-meteo.com/v1/air-quality` | air_quality_hourly |
+| Satellite Radiation | `satellite-api.open-meteo.com/v1/archive` | satellite_radiation_hourly, satellite_radiation_daily |
+| Flood | `flood-api.open-meteo.com/v1/flood` | flood_daily |
+| Geocoding | `geocoding-api.open-meteo.com/v1/search` | geocoding |
+| Elevation | `api.open-meteo.com/v1/elevation` | elevation |
 
-The SDK provides built-in pagination classes. **Use these instead of overriding `get_next_page_token()` directly.**
+**Paid tier URL pattern**: Replace `{subdomain}-api.open-meteo.com` with `customer-{subdomain}-api.open-meteo.com`
 
-**Built-in Paginator Classes:**
+### Key Design Patterns
 
-1. **SimpleHeaderPaginator**: For APIs using Link headers (RFC 5988)
+- **Columnar-to-row pivoting**: Open-Meteo returns `{"time": [...], "var1": [...], "var2": [...]}` — must pivot to one record per timestamp
+- **Ensemble member normalization**: `_memberNN` suffix columns → `member` field via `pivot_ensemble_to_rows`
+- **Previous runs normalization**: `_previous_dayN` suffix columns → `model_run_offset_days` field via `pivot_previous_runs_to_rows`
+- **Multi-location batching**: Comma-separated lat/lon in API requests, configurable `max_locations_per_request`
+- **Date chunking**: Historical/satellite/climate streams partition large date ranges into chunks
+- **Thread-safe rate limiting**: Shared sliding window via `deque` + `threading.Lock`
+- **Surrogate keys**: UUID5 from sorted primary key values
 
-   ```python
-   from singer_sdk.pagination import SimpleHeaderPaginator
+### Streams with custom `_build_base_params`
 
-   class MyStream(OpenMateoStream):
-       def get_new_paginator(self):
-           return SimpleHeaderPaginator()
-   ```
+Most streams use the default (temperature_unit, wind_speed_unit, precipitation_unit, timezone, timeformat). These override it:
+- **Marine**: uses `length_unit` instead of weather units
+- **Air Quality**: no weather units, adds `domains` param
+- **Satellite**: no weather units, adds `tilt`/`azimuth` params
+- **Flood**: no weather units, minimal params
+- **Geocoding/Elevation**: fully custom (non-time-series)
 
-1. **HeaderLinkPaginator**: For APIs with `Link: <url>; rel="next"` headers
+### Seasonal API Notes
 
-   ```python
-   from singer_sdk.pagination import HeaderLinkPaginator
+- API parameter name is `hourly` (NOT `six_hourly`), response key is also `hourly`
+- Timestamps are 6 hours apart; records labeled `granularity="six_hourly"`
+- Response includes 51 ensemble members (control + _member01 through _member50)
 
-   class MyStream(OpenMateoStream):
-       def get_new_paginator(self):
-           return HeaderLinkPaginator()
-   ```
-
-1. **JSONPathPaginator**: For cursor/token in response body
-
-   ```python
-   from singer_sdk.pagination import JSONPathPaginator
-
-   class MyStream(OpenMateoStream):
-       def get_new_paginator(self):
-           return JSONPathPaginator("$.pagination.next_token")
-   ```
-
-1. **SinglePagePaginator**: For non-paginated endpoints
-
-   ```python
-   from singer_sdk.pagination import SinglePagePaginator
-
-   class MyStream(OpenMateoStream):
-       def get_new_paginator(self):
-           return SinglePagePaginator()
-   ```
-
-**Creating Custom Paginators:**
-
-For complex pagination logic, create a custom paginator class:
-
-```python
-from singer_sdk.pagination import PageNumberPaginator
-
-class MyCustomPaginator(PageNumberPaginator):
-    def has_more(self, response):
-        """Check if there are more pages."""
-        data = response.json()
-        return data.get("has_more", False)
-
-    def get_next_url(self, response):
-        """Get the next page URL."""
-        data = response.json()
-        if self.has_more(response):
-            return data.get("next_url")
-        return None
-
-# Use in stream
-class MyStream(OpenMateoStream):
-    def get_new_paginator(self):
-        return MyCustomPaginator(start_value=1)
-```
-
-**Common Pagination Patterns:**
-
-- **Offset-based**: Use `OffsetPaginator`
-- **Page-based**: Use `PageNumberPaginator`
-- **Cursor-based**: Use or extend `JSONPathPaginator`
-- **HATEOAS/HAL**: Extend `BaseHATEOASPaginator` with a custom `get_next_url()` method to extract the next URL from the response.
-
-Only override `get_next_page_token()` as a last resort for very simple cases.
-
-#### State and Incremental Sync
-
-- Set `replication_key` to enable incremental sync (e.g., "updated_at")
-- Override `get_starting_timestamp()` to set initial sync point
-- State automatically managed by SDK
-- Access current state via `get_context_state()`
-
-#### Schema Evolution
-
-- Use flexible schemas during development
-- Add new properties without breaking changes
-- Consider making fields optional when unsure
-- Use `th.Property("field", th.StringType)` for basic types
-- Nest objects with `th.ObjectType(...)`
-
-### Testing
-
-Run tests to verify your changes:
+## Testing
 
 ```bash
-# Install dependencies
-uv sync
-
-# Run all tests
-uv run pytest
-
-# Run specific test
-uv run pytest tests/test_core.py -k test_name
+uv sync              # Install dependencies
+uv run pytest        # Run all tests
+uv run pytest -v -k test_name  # Run specific test
 ```
-
-### Configuration
-
-Configuration properties are defined in the tap class:
-
-- Required vs optional properties
-- Secret properties (passwords, tokens)
-- Mark sensitive data with `secret=True` parameter
-- Defaults specified in config schema
-
-Example configuration schema:
-
-```python
-from singer_sdk import typing as th
-
-config_jsonschema = th.PropertiesList(
-    th.Property("api_url", th.StringType, required=True),
-    th.Property("api_key", th.StringType, required=True, secret=True),
-    th.Property("start_date", th.DateTimeType),
-).to_dict()
-```
-
-Example test with config:
-
-```bash
-tap-open-mateo --config config.json --discover
-tap-open-mateo --config config.json --catalog catalog.json
-```
-
-### Keeping meltano.yml and Tap Settings in Sync
-
-When this tap is used with Meltano, the settings defined in `meltano.yml` must stay in sync with the `config_jsonschema` in the tap class. Configuration drift between these two sources causes confusion and runtime errors.
-
-**When to sync:**
-
-- Adding new configuration properties to the tap
-- Removing or renaming existing properties
-- Changing property types, defaults, or descriptions
-- Marking properties as required or secret
-
-**How to sync:**
-
-1. Update `config_jsonschema` in `tap_open_mateo/tap.py`
-1. Update the corresponding `settings` block in `meltano.yml`
-1. Update `.env.example` with the new environment variable
-
-Example - adding a new `batch_size` setting:
-
-```python
-# tap_open_mateo/tap.py
-config_jsonschema = th.PropertiesList(
-    th.Property("api_url", th.StringType, required=True),
-    th.Property("api_key", th.StringType, required=True, secret=True),
-    th.Property("batch_size", th.IntegerType, default=100),  # New setting
-).to_dict()
-```
-
-```yaml
-# meltano.yml
-plugins:
-  extractors:
-    - name: tap-open-mateo
-      settings:
-        - name: api_url
-          kind: string
-        - name: api_key
-          kind: string
-          sensitive: true
-        - name: batch_size  # New setting
-          kind: integer
-          value: 100
-```
-
-```bash
-# .env.example
-TAP_OPENMATEO_API_URL=https://api.example.com
-TAP_OPENMATEO_API_KEY=your_api_key_here
-TAP_OPENMATEO_BATCH_SIZE=100  # New setting
-```
-
-**Setting kind mappings:**
-
-| Python Type | Meltano Kind |
-|-------------|--------------|
-| `StringType` | `string` |
-| `IntegerType` | `integer` |
-| `BooleanType` | `boolean` |
-| `NumberType` | `number` |
-| `DateTimeType` | `date_iso8601` |
-| `ArrayType` | `array` |
-| `ObjectType` | `object` |
-
-Any properties with `secret=True` should be marked with `sensitive: true` in `meltano.yml`.
-
-**Best practices:**
-
-- Always update all three files (`tap.py`, `meltano.yml`, `.env.example`) in the same commit
-- Use the same default values in all locations
-- Keep descriptions consistent between code docstrings and `meltano.yml` `description` fields
-
-> **Note:** This guidance is consistent with target and mapper templates in the Singer SDK. See the [SDK documentation](https://sdk.meltano.com) for canonical reference.
-
-### Common Pitfalls
-
-1. **Rate Limiting**: Implement backoff using `RESTStream` built-in retry logic
-1. **Large Responses**: Use pagination, don't load entire dataset into memory
-1. **Schema Mismatches**: Validate data matches schema, handle null values
-1. **State Management**: Don't modify state directly, use SDK methods
-1. **Timezone Handling**: Use UTC, parse ISO 8601 datetime strings
-1. **Error Handling**: Let SDK handle retries, log warnings for data issues
-
-### SDK Resources
-
-- [Singer SDK Documentation](https://sdk.meltano.com)
-- [Singer Spec](https://hub.meltano.com/singer/spec)
-- [SDK Reference](https://sdk.meltano.com/en/latest/reference.html)
-- [Stream Maps](https://sdk.meltano.com/en/latest/stream_maps.html)
-
-### Best Practices
-
-1. **Logging**: Use `self.logger` for structured logging
-1. **Validation**: Validate API responses before emitting records
-1. **Documentation**: Update README with new streams and config options
-1. **Type Hints**: Add type hints to improve code clarity
-1. **Testing**: Write tests for new streams and edge cases
-1. **Performance**: Profile slow streams, optimize API calls
-1. **Error Messages**: Provide clear, actionable error messages
 
 ## File Structure
 
@@ -302,40 +102,14 @@ Any properties with `secret=True` should be marked with `sensitive: true` in `me
 tap-open-mateo/
 ├── tap_open_mateo/
 │   ├── __init__.py
-│   ├── tap.py          # Main tap class
-│   ├── client.py       # API client
-│   └── streams.py      # Stream definitions
+│   ├── tap.py            # Main tap class, config, location presets
+│   ├── client.py         # OpenMateoStream base class
+│   ├── helpers.py         # Pivot functions, surrogate keys
+│   └── streams/          # 11 stream files, 19 stream classes
 ├── tests/
 │   ├── __init__.py
 │   └── test_core.py
-├── config.json         # Example configuration
-├── pyproject.toml      # Dependencies and metadata
-└── README.md          # User documentation
+├── pyproject.toml
+├── meltano.yml
+└── README.md
 ```
-
-## Additional Resources
-
-- Project README: See `README.md` for setup and usage
-- Singer SDK: https://sdk.meltano.com
-- Meltano: https://meltano.com
-- Singer Specification: https://hub.meltano.com/singer/spec
-
-## Making Changes
-
-When implementing changes:
-
-1. Understand the existing code structure
-1. Follow Singer and SDK patterns
-1. Test thoroughly with real API credentials
-1. Update documentation and docstrings
-1. Ensure backward compatibility when possible
-1. Run linting and type checking
-
-## Questions?
-
-If you're uncertain about an implementation:
-
-- Check SDK documentation for similar examples
-- Review other Singer taps for patterns
-- Test incrementally with small changes
-- Validate against the Singer specification

@@ -89,6 +89,7 @@ def pivot_ensemble_to_rows(
     longitude: float,
     elevation: float | None,
     model: str,
+    granularity: str = "hourly",
 ) -> list[dict]:
     """Convert ensemble columnar response to normalized member rows.
 
@@ -109,7 +110,7 @@ def pivot_ensemble_to_rows(
         "longitude": longitude,
         "elevation": elevation,
         "model": model,
-        "granularity": "hourly",
+        "granularity": granularity,
     }
 
     def _col_key(var: str, member_num: int) -> str:

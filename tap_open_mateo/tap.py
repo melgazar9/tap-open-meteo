@@ -11,13 +11,25 @@ from singer_sdk import Tap
 from singer_sdk import typing as th
 
 from tap_open_mateo.streams import (
+    AirQualityHourlyStream,
     ClimateDailyStream,
+    ElevationStream,
     EnsembleHourlyStream,
+    FloodDailyStream,
     ForecastDailyStream,
     ForecastHourlyStream,
+    GeocodingStream,
     HistoricalDailyStream,
+    HistoricalForecastDailyStream,
+    HistoricalForecastHourlyStream,
     HistoricalHourlyStream,
+    MarineDailyStream,
+    MarineHourlyStream,
     PreviousRunsHourlyStream,
+    SatelliteRadiationDailyStream,
+    SatelliteRadiationHourlyStream,
+    SeasonalDailyStream,
+    SeasonalSixHourlyStream,
 )
 
 if sys.version_info >= (3, 12):
@@ -258,13 +270,139 @@ class TapOpenMateo(Tap):
             default="2050-01-01",
             description="Climate API end date (data available up to 2050-01-01).",
         ),
+        # --- Historical Forecast ---
+        th.Property(
+            "historical_forecast_start_date",
+            th.DateType,
+            description="Start date for Historical Forecast API (data from 2022+).",
+        ),
+        th.Property(
+            "historical_forecast_end_date",
+            th.DateType,
+            description="End date for Historical Forecast API. Defaults to yesterday.",
+        ),
+        # --- Seasonal Forecast ---
+        th.Property(
+            "seasonal_models",
+            th.ArrayType(th.StringType),
+            default=["ecmwf_seasonal_seamless"],
+            description="Seasonal forecast models to query.",
+        ),
+        th.Property(
+            "seasonal_six_hourly_variables",
+            th.ArrayType(th.StringType),
+            description="6-hourly variables for seasonal forecasts.",
+        ),
+        th.Property(
+            "seasonal_daily_variables",
+            th.ArrayType(th.StringType),
+            description="Daily variables for seasonal forecasts.",
+        ),
+        # --- Marine ---
+        th.Property(
+            "marine_hourly_variables",
+            th.ArrayType(th.StringType),
+            description="Hourly variables for marine forecasts.",
+        ),
+        th.Property(
+            "marine_daily_variables",
+            th.ArrayType(th.StringType),
+            description="Daily variables for marine forecasts.",
+        ),
+        th.Property(
+            "length_unit",
+            th.StringType,
+            default="imperial",
+            description="Length unit for marine API: 'metric' or 'imperial'.",
+        ),
+        # --- Air Quality ---
+        th.Property(
+            "air_quality_variables",
+            th.ArrayType(th.StringType),
+            description="Hourly variables for air quality forecasts.",
+        ),
+        th.Property(
+            "air_quality_domains",
+            th.StringType,
+            default="auto",
+            description="Air quality model domain: 'auto', 'cams_europe', 'cams_global'.",
+        ),
+        # --- Satellite Radiation ---
+        th.Property(
+            "satellite_start_date",
+            th.DateType,
+            description="Start date for satellite radiation archive.",
+        ),
+        th.Property(
+            "satellite_end_date",
+            th.DateType,
+            description="End date for satellite radiation archive. Defaults to yesterday.",
+        ),
+        th.Property(
+            "satellite_hourly_variables",
+            th.ArrayType(th.StringType),
+            description="Hourly variables for satellite radiation.",
+        ),
+        th.Property(
+            "satellite_daily_variables",
+            th.ArrayType(th.StringType),
+            description="Daily variables for satellite radiation.",
+        ),
+        th.Property(
+            "solar_panel_tilt",
+            th.NumberType,
+            description="Panel tilt angle (0-90 degrees) for GTI calculations.",
+        ),
+        th.Property(
+            "solar_panel_azimuth",
+            th.NumberType,
+            description="Panel azimuth angle (-90 to 90 degrees) for GTI calculations.",
+        ),
+        # --- Flood ---
+        th.Property(
+            "flood_variables",
+            th.ArrayType(th.StringType),
+            description="Daily variables for flood forecasts.",
+        ),
+        th.Property(
+            "flood_ensemble",
+            th.BooleanType,
+            default=False,
+            description="If true, request all 50 ensemble members for flood data.",
+        ),
+        th.Property(
+            "flood_forecast_days",
+            th.IntegerType,
+            default=92,
+            description="Flood forecast horizon in days (max 210).",
+        ),
+        # --- Geocoding ---
+        th.Property(
+            "geocoding_search_terms",
+            th.ArrayType(th.StringType),
+            description="Location names to search via Geocoding API.",
+        ),
+        th.Property(
+            "geocoding_count",
+            th.IntegerType,
+            default=10,
+            description="Max results per geocoding search (1-100).",
+        ),
+        th.Property(
+            "geocoding_language",
+            th.StringType,
+            default="en",
+            description="Language for geocoding results.",
+        ),
+        # --- Endpoint Selection ---
         th.Property(
             "enabled_endpoints",
             th.ArrayType(th.StringType),
             default=["forecast", "historical", "ensemble", "previous_runs"],
             description=(
-                "Which endpoints to extract. "
-                "Options: forecast, historical, ensemble, previous_runs, climate."
+                "Which endpoints to extract. Options: forecast, historical, "
+                "historical_forecast, ensemble, previous_runs, seasonal, marine, "
+                "air_quality, satellite, flood, climate, geocoding, elevation."
             ),
         ),
         th.Property(
@@ -366,6 +504,34 @@ class TapOpenMateo(Tap):
 
         if "climate" in enabled:
             streams.append(ClimateDailyStream(self))
+
+        if "historical_forecast" in enabled and self.config.get("historical_forecast_start_date"):
+            streams.append(HistoricalForecastHourlyStream(self))
+            streams.append(HistoricalForecastDailyStream(self))
+
+        if "seasonal" in enabled:
+            streams.append(SeasonalSixHourlyStream(self))
+            streams.append(SeasonalDailyStream(self))
+
+        if "marine" in enabled:
+            streams.append(MarineHourlyStream(self))
+            streams.append(MarineDailyStream(self))
+
+        if "air_quality" in enabled:
+            streams.append(AirQualityHourlyStream(self))
+
+        if "satellite" in enabled and self.config.get("satellite_start_date"):
+            streams.append(SatelliteRadiationHourlyStream(self))
+            streams.append(SatelliteRadiationDailyStream(self))
+
+        if "flood" in enabled:
+            streams.append(FloodDailyStream(self))
+
+        if "geocoding" in enabled and self.config.get("geocoding_search_terms"):
+            streams.append(GeocodingStream(self))
+
+        if "elevation" in enabled:
+            streams.append(ElevationStream(self))
 
         return streams
 

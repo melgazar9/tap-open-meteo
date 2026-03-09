@@ -98,9 +98,105 @@ plugins:
         kind: date_iso8601
         description: Climate API end date.
 
+      # Historical Forecast
+      - name: historical_forecast_start_date
+        kind: date_iso8601
+        description: Start date for Historical Forecast API (data from 2022+).
+
+      - name: historical_forecast_end_date
+        kind: date_iso8601
+        description: End date for Historical Forecast API. Defaults to yesterday.
+
+      # Seasonal Forecast
+      - name: seasonal_models
+        kind: array
+        description: Seasonal forecast models to query.
+
+      - name: seasonal_six_hourly_variables
+        kind: array
+        description: 6-hourly variables for seasonal forecasts.
+
+      - name: seasonal_daily_variables
+        kind: array
+        description: Daily variables for seasonal forecasts.
+
+      # Marine
+      - name: marine_hourly_variables
+        kind: array
+        description: Hourly variables for marine forecasts.
+
+      - name: marine_daily_variables
+        kind: array
+        description: Daily variables for marine forecasts.
+
+      - name: length_unit
+        kind: string
+        description: "Length unit for marine API: 'metric' or 'imperial'."
+
+      # Air Quality
+      - name: air_quality_variables
+        kind: array
+        description: Hourly variables for air quality forecasts.
+
+      - name: air_quality_domains
+        kind: string
+        description: "Air quality model domain: 'auto', 'cams_europe', 'cams_global'."
+
+      # Satellite Radiation
+      - name: satellite_start_date
+        kind: date_iso8601
+        description: Start date for satellite radiation archive.
+
+      - name: satellite_end_date
+        kind: date_iso8601
+        description: End date for satellite radiation archive. Defaults to yesterday.
+
+      - name: satellite_hourly_variables
+        kind: array
+        description: Hourly variables for satellite radiation.
+
+      - name: satellite_daily_variables
+        kind: array
+        description: Daily variables for satellite radiation.
+
+      - name: solar_panel_tilt
+        kind: number
+        description: Panel tilt angle (0-90 degrees) for GTI calculations.
+
+      - name: solar_panel_azimuth
+        kind: number
+        description: Panel azimuth angle (-90 to 90 degrees) for GTI calculations.
+
+      # Flood
+      - name: flood_variables
+        kind: array
+        description: Daily variables for flood forecasts.
+
+      - name: flood_ensemble
+        kind: boolean
+        description: If true, request all 50 ensemble members for flood data.
+
+      - name: flood_forecast_days
+        kind: integer
+        description: Flood forecast horizon in days (max 210).
+
+      # Geocoding
+      - name: geocoding_search_terms
+        kind: array
+        description: Location names to search via Geocoding API.
+
+      - name: geocoding_count
+        kind: integer
+        description: Max results per geocoding search (1-100).
+
+      - name: geocoding_language
+        kind: string
+        description: Language for geocoding results.
+
+      # Endpoint Selection
       - name: enabled_endpoints
         kind: array
-        description: "Which endpoints to extract: forecast, historical, ensemble, previous_runs, climate."
+        description: "Which endpoints to extract: forecast, historical, historical_forecast, ensemble, previous_runs, seasonal, marine, air_quality, satellite, flood, climate, geocoding, elevation."
 
       - name: max_requests_per_minute
         kind: integer
@@ -123,9 +219,21 @@ plugins:
       - forecast_daily.*
       - historical_hourly.*
       - historical_daily.*
+      - historical_forecast_hourly.*
+      - historical_forecast_daily.*
       - ensemble_hourly.*
       - previous_runs_hourly.*
+      - seasonal_six_hourly.*
+      - seasonal_daily.*
+      - marine_hourly.*
+      - marine_daily.*
+      - air_quality_hourly.*
+      - satellite_radiation_hourly.*
+      - satellite_radiation_daily.*
+      - flood_daily.*
       - climate_daily.*
+      - geocoding.*
+      - elevation.*
 
     config:
       api_key: $OPEN_METEO_API_KEY
