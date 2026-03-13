@@ -31,8 +31,10 @@ SATELLITE_HOURLY_PROPERTIES = th.PropertiesList(
     th.Property("diffuse_radiation", th.NumberType),
     th.Property("direct_normal_irradiance", th.NumberType),
     th.Property("global_tilted_irradiance", th.NumberType),
+    th.Property("shortwave_radiation_clear_sky", th.NumberType),
     th.Property("terrestrial_radiation", th.NumberType),
     th.Property("shortwave_radiation_instant", th.NumberType),
+    th.Property("shortwave_radiation_clear_sky_instant", th.NumberType),
     th.Property("direct_radiation_instant", th.NumberType),
     th.Property("diffuse_radiation_instant", th.NumberType),
     th.Property("direct_normal_irradiance_instant", th.NumberType),
@@ -40,7 +42,6 @@ SATELLITE_HOURLY_PROPERTIES = th.PropertiesList(
     th.Property("terrestrial_radiation_instant", th.NumberType),
     th.Property("is_day", th.IntegerType),
     th.Property("sunshine_duration", th.NumberType),
-    th.Property("surrogate_key", th.StringType),
 )
 
 SATELLITE_DAILY_PROPERTIES = th.PropertiesList(
@@ -56,7 +57,6 @@ SATELLITE_DAILY_PROPERTIES = th.PropertiesList(
     th.Property("daylight_duration", th.NumberType),
     th.Property("sunshine_duration", th.NumberType),
     th.Property("shortwave_radiation_sum", th.NumberType),
-    th.Property("surrogate_key", th.StringType),
 )
 
 DEFAULT_SATELLITE_HOURLY_VARIABLES = [
@@ -78,21 +78,14 @@ DEFAULT_SATELLITE_DAILY_VARIABLES = [
 ]
 
 
-class SatelliteRadiationHourlyStream(OpenMateoStream):
-    """Satellite-derived solar radiation data at hourly resolution.
+class _SatelliteBaseStream(OpenMateoStream):
+    """Shared config for satellite radiation hourly and daily streams."""
 
-    Date-chunked like historical streams. Supports tilt/azimuth params
-    for Global Tilted Irradiance calculations (solar panel output).
-    Does not accept weather unit parameters.
-    """
-
-    name = "satellite_radiation_hourly"
     path = "/v1/archive"
     _free_url_base = "https://satellite-api.open-meteo.com"
     _paid_url_base = "https://customer-satellite-api.open-meteo.com"
     primary_keys = ("location_name", "model", "time", "granularity")
     replication_key = "time"
-    schema = SATELLITE_HOURLY_PROPERTIES.to_dict()
 
     def _build_base_params(self) -> dict:
         """Satellite API does not accept weather unit params. Supports tilt/azimuth."""
@@ -104,9 +97,19 @@ class SatelliteRadiationHourlyStream(OpenMateoStream):
             params["tilt"] = str(tilt)
         if (azimuth := self.config.get("solar_panel_azimuth")) is not None:
             params["azimuth"] = str(azimuth)
-        if api_key := self.config.get("api_key"):
-            params["apikey"] = api_key
+        self._apply_optional_params(params)
         return params
+
+
+class SatelliteRadiationHourlyStream(_SatelliteBaseStream):
+    """Satellite-derived solar radiation data at hourly resolution.
+
+    Date-chunked like historical streams. Supports tilt/azimuth params
+    for Global Tilted Irradiance calculations (solar panel output).
+    """
+
+    name = "satellite_radiation_hourly"
+    schema = SATELLITE_HOURLY_PROPERTIES.to_dict()
 
     @property
     def partitions(self) -> list[dict]:
@@ -130,33 +133,14 @@ class SatelliteRadiationHourlyStream(OpenMateoStream):
         yield from self._fetch_and_extract(locations, "hourly", "best_match", extra)
 
 
-class SatelliteRadiationDailyStream(OpenMateoStream):
+class SatelliteRadiationDailyStream(_SatelliteBaseStream):
     """Satellite-derived solar radiation data at daily resolution.
 
     Daily aggregations of satellite radiation measurements.
     """
 
     name = "satellite_radiation_daily"
-    path = "/v1/archive"
-    _free_url_base = "https://satellite-api.open-meteo.com"
-    _paid_url_base = "https://customer-satellite-api.open-meteo.com"
-    primary_keys = ("location_name", "model", "time", "granularity")
-    replication_key = "time"
     schema = SATELLITE_DAILY_PROPERTIES.to_dict()
-
-    def _build_base_params(self) -> dict:
-        """Satellite API does not accept weather unit params."""
-        params: dict[str, str] = {
-            "timezone": self.config.get("timezone", "America/Chicago"),
-            "timeformat": "iso8601",
-        }
-        if (tilt := self.config.get("solar_panel_tilt")) is not None:
-            params["tilt"] = str(tilt)
-        if (azimuth := self.config.get("solar_panel_azimuth")) is not None:
-            params["azimuth"] = str(azimuth)
-        if api_key := self.config.get("api_key"):
-            params["apikey"] = api_key
-        return params
 
     @property
     def partitions(self) -> list[dict]:

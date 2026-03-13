@@ -14,6 +14,120 @@ if t.TYPE_CHECKING:
 
     from singer_sdk.helpers.types import Context
 
+# --- Pressure level variable definitions ---
+# Documented at: https://open-meteo.com/en/docs (Pressure Level Variables section)
+
+PRESSURE_LEVELS = [
+    1000, 975, 950, 925, 900, 850, 800, 700, 600,
+    500, 400, 300, 250, 200, 150, 100, 70, 50, 30,
+]
+PRESSURE_LEVEL_VARIABLE_TYPES = [
+    "temperature", "relative_humidity", "cloud_cover",
+    "wind_speed", "wind_direction", "geopotential_height", "dew_point",
+]
+_pressure_level_properties = [
+    th.Property(f"{var}_{level}hPa", th.NumberType)
+    for var in PRESSURE_LEVEL_VARIABLE_TYPES
+    for level in PRESSURE_LEVELS
+]
+
+# --- Weather variables shared across forecast-family hourly streams ---
+# Used by: forecast_hourly, historical_hourly, historical_forecast_hourly, previous_runs_hourly
+# Includes variables from both Forecast and ERA5 endpoints (different soil/wind naming)
+
+_hourly_weather_properties = [
+    # Temperature
+    th.Property("temperature_2m", th.NumberType),
+    th.Property("temperature_80m", th.NumberType),
+    th.Property("temperature_120m", th.NumberType),
+    th.Property("temperature_180m", th.NumberType),
+    # Humidity
+    th.Property("relative_humidity_2m", th.NumberType),
+    th.Property("dew_point_2m", th.NumberType),
+    th.Property("apparent_temperature", th.NumberType),
+    th.Property("wet_bulb_temperature_2m", th.NumberType),
+    # Precipitation
+    th.Property("precipitation", th.NumberType),
+    th.Property("precipitation_probability", th.NumberType),
+    th.Property("rain", th.NumberType),
+    th.Property("showers", th.NumberType),
+    th.Property("snowfall", th.NumberType),
+    th.Property("snow_depth", th.NumberType),
+    # Pressure
+    th.Property("pressure_msl", th.NumberType),
+    th.Property("surface_pressure", th.NumberType),
+    # Wind (10m)
+    th.Property("wind_speed_10m", th.NumberType),
+    th.Property("wind_direction_10m", th.NumberType),
+    th.Property("wind_gusts_10m", th.NumberType),
+    # Wind (upper levels — forecast: 80/120/180m)
+    th.Property("wind_speed_80m", th.NumberType),
+    th.Property("wind_speed_120m", th.NumberType),
+    th.Property("wind_speed_180m", th.NumberType),
+    th.Property("wind_direction_80m", th.NumberType),
+    th.Property("wind_direction_120m", th.NumberType),
+    th.Property("wind_direction_180m", th.NumberType),
+    # Wind (100m — ERA5 historical)
+    th.Property("wind_speed_100m", th.NumberType),
+    th.Property("wind_direction_100m", th.NumberType),
+    # Cloud & visibility
+    th.Property("cloud_cover", th.NumberType),
+    th.Property("cloud_cover_low", th.NumberType),
+    th.Property("cloud_cover_mid", th.NumberType),
+    th.Property("cloud_cover_high", th.NumberType),
+    th.Property("visibility", th.NumberType),
+    th.Property("weather_code", th.IntegerType),
+    th.Property("is_day", th.IntegerType),
+    # Soil (forecast — point depths)
+    th.Property("soil_temperature_0cm", th.NumberType),
+    th.Property("soil_temperature_6cm", th.NumberType),
+    th.Property("soil_temperature_18cm", th.NumberType),
+    th.Property("soil_temperature_54cm", th.NumberType),
+    th.Property("soil_moisture_0_to_1cm", th.NumberType),
+    th.Property("soil_moisture_1_to_3cm", th.NumberType),
+    th.Property("soil_moisture_3_to_9cm", th.NumberType),
+    th.Property("soil_moisture_9_to_27cm", th.NumberType),
+    th.Property("soil_moisture_27_to_81cm", th.NumberType),
+    # Soil (ERA5 historical — range depths)
+    th.Property("soil_temperature_0_to_7cm", th.NumberType),
+    th.Property("soil_temperature_7_to_28cm", th.NumberType),
+    th.Property("soil_temperature_28_to_100cm", th.NumberType),
+    th.Property("soil_temperature_100_to_255cm", th.NumberType),
+    th.Property("soil_moisture_0_to_7cm", th.NumberType),
+    th.Property("soil_moisture_7_to_28cm", th.NumberType),
+    th.Property("soil_moisture_28_to_100cm", th.NumberType),
+    th.Property("soil_moisture_100_to_255cm", th.NumberType),
+    # Solar radiation (preceding hour mean)
+    th.Property("shortwave_radiation", th.NumberType),
+    th.Property("direct_radiation", th.NumberType),
+    th.Property("diffuse_radiation", th.NumberType),
+    th.Property("direct_normal_irradiance", th.NumberType),
+    th.Property("global_tilted_irradiance", th.NumberType),
+    th.Property("terrestrial_radiation", th.NumberType),
+    # Solar radiation (instant)
+    th.Property("shortwave_radiation_instant", th.NumberType),
+    th.Property("direct_radiation_instant", th.NumberType),
+    th.Property("diffuse_radiation_instant", th.NumberType),
+    th.Property("direct_normal_irradiance_instant", th.NumberType),
+    th.Property("global_tilted_irradiance_instant", th.NumberType),
+    th.Property("terrestrial_radiation_instant", th.NumberType),
+    th.Property("sunshine_duration", th.NumberType),
+    # Atmospheric stability
+    th.Property("cape", th.NumberType),
+    th.Property("lifted_index", th.NumberType),
+    th.Property("convective_inhibition", th.NumberType),
+    th.Property("freezing_level_height", th.NumberType),
+    th.Property("boundary_layer_height", th.NumberType),
+    th.Property("total_column_integrated_water_vapour", th.NumberType),
+    # Evapotranspiration
+    th.Property("evapotranspiration", th.NumberType),
+    th.Property("et0_fao_evapotranspiration", th.NumberType),
+    th.Property("vapour_pressure_deficit", th.NumberType),
+    # UV
+    th.Property("uv_index", th.NumberType),
+    th.Property("uv_index_clear_sky", th.NumberType),
+]
+
 # --- Shared schema properties ---
 
 FORECAST_HOURLY_PROPERTIES = th.PropertiesList(
@@ -24,48 +138,8 @@ FORECAST_HOURLY_PROPERTIES = th.PropertiesList(
     th.Property("model", th.StringType),
     th.Property("time", th.DateTimeType, required=True),
     th.Property("granularity", th.StringType, required=True),
-    th.Property("temperature_2m", th.NumberType),
-    th.Property("relative_humidity_2m", th.NumberType),
-    th.Property("dew_point_2m", th.NumberType),
-    th.Property("apparent_temperature", th.NumberType),
-    th.Property("wind_speed_10m", th.NumberType),
-    th.Property("wind_direction_10m", th.NumberType),
-    th.Property("wind_gusts_10m", th.NumberType),
-    th.Property("precipitation", th.NumberType),
-    th.Property("rain", th.NumberType),
-    th.Property("snowfall", th.NumberType),
-    th.Property("snow_depth", th.NumberType),
-    th.Property("pressure_msl", th.NumberType),
-    th.Property("surface_pressure", th.NumberType),
-    th.Property("cloud_cover", th.NumberType),
-    th.Property("cloud_cover_low", th.NumberType),
-    th.Property("cloud_cover_mid", th.NumberType),
-    th.Property("cloud_cover_high", th.NumberType),
-    th.Property("visibility", th.NumberType),
-    th.Property("weather_code", th.IntegerType),
-    th.Property("soil_temperature_0cm", th.NumberType),
-    th.Property("soil_temperature_6cm", th.NumberType),
-    th.Property("soil_temperature_18cm", th.NumberType),
-    th.Property("soil_temperature_54cm", th.NumberType),
-    th.Property("soil_moisture_0_to_1cm", th.NumberType),
-    th.Property("soil_moisture_1_to_3cm", th.NumberType),
-    th.Property("soil_moisture_3_to_9cm", th.NumberType),
-    th.Property("soil_moisture_9_to_27cm", th.NumberType),
-    th.Property("soil_moisture_27_to_81cm", th.NumberType),
-    th.Property("cape", th.NumberType),
-    th.Property("evapotranspiration", th.NumberType),
-    th.Property("et0_fao_evapotranspiration", th.NumberType),
-    th.Property("vapour_pressure_deficit", th.NumberType),
-    th.Property("shortwave_radiation", th.NumberType),
-    th.Property("direct_radiation", th.NumberType),
-    th.Property("diffuse_radiation", th.NumberType),
-    th.Property("direct_normal_irradiance", th.NumberType),
-    th.Property("sunshine_duration", th.NumberType),
-    th.Property("wet_bulb_temperature", th.NumberType),
-    th.Property("uv_index", th.NumberType),
-    th.Property("freezing_level_height", th.NumberType),
-    th.Property("is_day", th.IntegerType),
-    th.Property("surrogate_key", th.StringType),
+    *_hourly_weather_properties,
+    *_pressure_level_properties,
 )
 
 FORECAST_DAILY_PROPERTIES = th.PropertiesList(
@@ -76,33 +150,76 @@ FORECAST_DAILY_PROPERTIES = th.PropertiesList(
     th.Property("model", th.StringType),
     th.Property("time", th.DateTimeType, required=True),
     th.Property("granularity", th.StringType, required=True),
+    # Temperature
     th.Property("temperature_2m_max", th.NumberType),
     th.Property("temperature_2m_min", th.NumberType),
     th.Property("temperature_2m_mean", th.NumberType),
     th.Property("apparent_temperature_max", th.NumberType),
     th.Property("apparent_temperature_min", th.NumberType),
     th.Property("apparent_temperature_mean", th.NumberType),
+    th.Property("wet_bulb_temperature_2m_max", th.NumberType),
+    th.Property("wet_bulb_temperature_2m_min", th.NumberType),
+    th.Property("wet_bulb_temperature_2m_mean", th.NumberType),
+    # Precipitation
     th.Property("precipitation_sum", th.NumberType),
     th.Property("rain_sum", th.NumberType),
     th.Property("showers_sum", th.NumberType),
     th.Property("snowfall_sum", th.NumberType),
+    th.Property("snowfall_water_equivalent_sum", th.NumberType),
     th.Property("precipitation_hours", th.NumberType),
     th.Property("precipitation_probability_max", th.NumberType),
     th.Property("precipitation_probability_mean", th.NumberType),
     th.Property("precipitation_probability_min", th.NumberType),
+    # General
     th.Property("weather_code", th.IntegerType),
     th.Property("sunrise", th.StringType),
     th.Property("sunset", th.StringType),
     th.Property("daylight_duration", th.NumberType),
     th.Property("sunshine_duration", th.NumberType),
+    # Wind
     th.Property("wind_speed_10m_max", th.NumberType),
+    th.Property("wind_speed_10m_mean", th.NumberType),
+    th.Property("wind_speed_10m_min", th.NumberType),
     th.Property("wind_gusts_10m_max", th.NumberType),
+    th.Property("wind_gusts_10m_mean", th.NumberType),
+    th.Property("wind_gusts_10m_min", th.NumberType),
     th.Property("wind_direction_10m_dominant", th.NumberType),
+    # Solar & ET
     th.Property("shortwave_radiation_sum", th.NumberType),
     th.Property("et0_fao_evapotranspiration", th.NumberType),
+    th.Property("et0_fao_evapotranspiration_sum", th.NumberType),
+    # Cloud & visibility
+    th.Property("cloud_cover_mean", th.NumberType),
+    th.Property("cloud_cover_max", th.NumberType),
+    th.Property("cloud_cover_min", th.NumberType),
+    th.Property("visibility_mean", th.NumberType),
+    th.Property("visibility_max", th.NumberType),
+    th.Property("visibility_min", th.NumberType),
+    # Humidity
+    th.Property("dew_point_2m_mean", th.NumberType),
+    th.Property("dew_point_2m_max", th.NumberType),
+    th.Property("dew_point_2m_min", th.NumberType),
+    th.Property("relative_humidity_2m_mean", th.NumberType),
+    th.Property("relative_humidity_2m_max", th.NumberType),
+    th.Property("relative_humidity_2m_min", th.NumberType),
+    # Pressure
+    th.Property("pressure_msl_mean", th.NumberType),
+    th.Property("pressure_msl_max", th.NumberType),
+    th.Property("pressure_msl_min", th.NumberType),
+    th.Property("surface_pressure_mean", th.NumberType),
+    th.Property("surface_pressure_max", th.NumberType),
+    th.Property("surface_pressure_min", th.NumberType),
+    # Atmospheric
+    th.Property("cape_mean", th.NumberType),
+    th.Property("cape_max", th.NumberType),
+    th.Property("cape_min", th.NumberType),
+    th.Property("vapour_pressure_deficit_max", th.NumberType),
+    th.Property("updraft_max", th.NumberType),
+    th.Property("growing_degree_days_base_0_limit_50", th.NumberType),
+    th.Property("leaf_wetness_probability_mean", th.NumberType),
+    # UV
     th.Property("uv_index_max", th.NumberType),
     th.Property("uv_index_clear_sky_max", th.NumberType),
-    th.Property("surrogate_key", th.StringType),
 )
 
 
@@ -194,21 +311,7 @@ class PreviousRunsHourlyStream(OpenMateoStream):
         th.Property("model_run_offset_days", th.IntegerType, required=True),
         th.Property("time", th.DateTimeType, required=True),
         th.Property("granularity", th.StringType, required=True),
-        th.Property("temperature_2m", th.NumberType),
-        th.Property("relative_humidity_2m", th.NumberType),
-        th.Property("dew_point_2m", th.NumberType),
-        th.Property("apparent_temperature", th.NumberType),
-        th.Property("wind_speed_10m", th.NumberType),
-        th.Property("wind_direction_10m", th.NumberType),
-        th.Property("wind_gusts_10m", th.NumberType),
-        th.Property("precipitation", th.NumberType),
-        th.Property("rain", th.NumberType),
-        th.Property("snowfall", th.NumberType),
-        th.Property("snow_depth", th.NumberType),
-        th.Property("pressure_msl", th.NumberType),
-        th.Property("cloud_cover", th.NumberType),
-        th.Property("weather_code", th.IntegerType),
-        th.Property("surrogate_key", th.StringType),
+        *_hourly_weather_properties,
     ).to_dict()
 
     @staticmethod

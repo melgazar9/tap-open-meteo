@@ -16,7 +16,7 @@ import requests
 from singer_sdk.pagination import SinglePagePaginator
 from singer_sdk.streams import RESTStream
 
-from tap_open_mateo.helpers import generate_surrogate_key, pivot_columnar_to_rows
+from tap_open_mateo.helpers import pivot_columnar_to_rows
 
 if t.TYPE_CHECKING:
     from collections.abc import Iterable
@@ -30,7 +30,6 @@ class OpenMateoStream(RESTStream, ABC):
     rest_method = "GET"
     _free_url_base = "https://api.open-meteo.com"
     _paid_url_base = "https://customer-api.open-meteo.com"
-    _add_surrogate_key = True
 
     def __init__(self, tap: t.Any) -> None:
         super().__init__(tap)
@@ -41,6 +40,8 @@ class OpenMateoStream(RESTStream, ABC):
         self._throttle_lock = tap._shared_throttle_lock
         self._request_timestamps = tap._shared_request_timestamps
         self._skipped_partitions: list[dict] = []
+        self._schema_checked: bool = False
+        self._drift_checked_locations: set[str] = set()
 
     # --- Properties ---
 
@@ -62,6 +63,18 @@ class OpenMateoStream(RESTStream, ABC):
     def get_new_paginator(self) -> SinglePagePaginator:
         """Open-Meteo returns full time series in one response, no pagination."""
         return SinglePagePaginator()
+
+    def sync(self, context: t.Any = None) -> None:
+        """Sync stream with skipped-partition summary on completion."""
+        super().sync(context)
+        if self._skipped_partitions:
+            logging.error(
+                "*** SKIPPED PARTITION SUMMARY *** Stream %s: %d partition(s) were skipped "
+                "due to API errors. Data for these partitions is MISSING from the output: %s",
+                self.name,
+                len(self._skipped_partitions),
+                self._skipped_partitions,
+            )
 
     def parse_response(self, response: requests.Response) -> Iterable[dict]:
         """Not used — get_records handles requests directly via _make_request."""
@@ -163,7 +176,11 @@ class OpenMateoStream(RESTStream, ABC):
 
                 if 400 <= status_code < 500 and status_code != 429:
                     response_body = e.response.text[:200] if e.response.text else "no body"
-                    logging.warning("Client error %d for %s: %s. Skipping partition.", status_code, redacted_url, response_body)
+                    logging.error(
+                        "SKIPPED PARTITION — Client error %d for %s: %s. "
+                        "Data for this partition will be missing from output.",
+                        status_code, redacted_url, response_body,
+                    )
                     self._skipped_partitions.append({"stream": self.name, "url": redacted_url, "status_code": status_code})
                     if self.config.get("strict_mode", False):
                         raise
@@ -182,9 +199,15 @@ class OpenMateoStream(RESTStream, ABC):
             "timezone": self.config.get("timezone", "America/Chicago"),
             "timeformat": "iso8601",
         }
+        self._apply_optional_params(params)
+        return params
+
+    def _apply_optional_params(self, params: dict) -> None:
+        """Add cell_selection and apikey to params if configured."""
+        if cell_selection := self.config.get("cell_selection"):
+            params["cell_selection"] = cell_selection
         if api_key := self.config.get("api_key"):
             params["apikey"] = api_key
-        return params
 
     def _build_location_params(self, locations: list[dict]) -> dict:
         """Build latitude/longitude params for a batch of locations."""
@@ -223,6 +246,8 @@ class OpenMateoStream(RESTStream, ABC):
             current = chunk_end + timedelta(days=1)
         return chunks
 
+    _default_end_date_lag_days: int = 1
+
     def _date_chunked_partitions(
         self,
         start_key: str,
@@ -239,7 +264,9 @@ class OpenMateoStream(RESTStream, ABC):
         if not start:
             return []
 
-        end = self._parse_config_date(end_key) or (date.today() - timedelta(days=1))
+        end = self._parse_config_date(end_key) or (
+            date.today() - timedelta(days=self._default_end_date_lag_days)
+        )
         chunk_days = self.config.get(chunk_days_key, default_chunk_days) * chunk_multiplier
         chunks = self._get_chunk_ranges(start, end, chunk_days)
 
@@ -284,8 +311,37 @@ class OpenMateoStream(RESTStream, ABC):
 
         return section
 
+    # Maximum allowed coordinate drift between requested and returned location (degrees).
+    # ~0.25 deg ≈ 28 km — beyond this the API is returning a substantially different grid cell.
+    _max_coordinate_drift_deg: float = 0.25
+
+    def _check_coordinate_drift(self, data: dict, location: dict) -> None:
+        """Warn if API returned coordinates far from what we requested. Checked once per location."""
+        loc_key = location["name"]
+        if loc_key in self._drift_checked_locations:
+            return
+        self._drift_checked_locations.add(loc_key)
+
+        api_lat = data.get("latitude")
+        api_lon = data.get("longitude")
+        if api_lat is None or api_lon is None:
+            return
+
+        lat_drift = abs(float(api_lat) - float(location["latitude"]))
+        lon_drift = abs(float(api_lon) - float(location["longitude"]))
+        if lat_drift > self._max_coordinate_drift_deg or lon_drift > self._max_coordinate_drift_deg:
+            logging.warning(
+                "Stream %s: Location '%s' coordinate drift — "
+                "requested (%.4f, %.4f) but API returned (%.4f, %.4f). "
+                "Drift: %.4f lat, %.4f lon. Consider adjusting coordinates or cell_selection.",
+                self.name, location["name"],
+                location["latitude"], location["longitude"],
+                api_lat, api_lon, lat_drift, lon_drift,
+            )
+
     def _extract_single_location(self, data: dict, location: dict, granularity: str, model: str) -> list[dict]:
         """Extract records from a single-location response."""
+        self._check_coordinate_drift(data, location)
         section = self._validate_response_section(data, granularity)
         if not section:
             return []
@@ -322,6 +378,10 @@ class OpenMateoStream(RESTStream, ABC):
 
         data = self._make_request(f"{self.url_base}{self.path}", params)
         if not data:
+            logging.warning(
+                "Stream %s: Empty response from API, no records extracted for this request.",
+                self.name,
+            )
             return []
 
         if isinstance(data, list):
@@ -330,11 +390,40 @@ class OpenMateoStream(RESTStream, ABC):
 
     # --- Post Processing ---
 
+    def _check_missing_fields(self, row: dict) -> None:
+        """Log CRITICAL if API returns fields not in our schema (silent data loss).
+
+        Follows tap-massive pattern: check once per stream, not every record.
+        """
+        if self._schema_checked:
+            return
+        self._schema_checked = True
+
+        schema_fields = set(self.schema.get("properties", {}).keys())
+        record_fields = set(row.keys())
+
+        missing_in_schema = record_fields - schema_fields
+        if missing_in_schema:
+            logging.critical(
+                "*** SCHEMA GAP *** Stream %s: API returned %d fields NOT in schema "
+                "(these will be SILENTLY DROPPED): %s",
+                self.name,
+                len(missing_in_schema),
+                sorted(missing_in_schema),
+            )
+
+        missing_in_record = schema_fields - record_fields
+        if missing_in_record and len(missing_in_record) <= 20:
+            logging.debug(
+                "Stream %s: %d schema fields not in record (expected for optional fields): %s",
+                self.name,
+                len(missing_in_record),
+                sorted(missing_in_record),
+            )
+
     def post_process(self, row: dict, context: Context | None = None) -> dict | None:
-        """Add surrogate key to each record."""
-        if self._add_surrogate_key:
-            key_fields = {k: row.get(k) for k in self.primary_keys}
-            row["surrogate_key"] = generate_surrogate_key(key_fields)
+        """Validate schema coverage for each record."""
+        self._check_missing_fields(row)
         return row
 
     def get_resolved_locations(self) -> list[dict]:

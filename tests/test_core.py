@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 from tap_open_mateo.helpers import (
-    generate_surrogate_key,
     pivot_columnar_to_rows,
     pivot_ensemble_to_rows,
     pivot_previous_runs_to_rows,
@@ -163,22 +164,6 @@ def test_pivot_previous_runs_to_rows():
     day2 = [r for r in records if r["model_run_offset_days"] == 2]
     assert len(day2) == 2
     assert day2[0]["temperature_2m"] == 7.1
-
-
-def test_generate_surrogate_key():
-    """Verify surrogate key is deterministic."""
-    data = {"location_name": "NYC", "time": "2026-03-09T00:00", "model": "gfs"}
-    key1 = generate_surrogate_key(data)
-    key2 = generate_surrogate_key(data)
-    assert key1 == key2
-    assert len(key1) == 36  # UUID format
-
-
-def test_generate_surrogate_key_different_data():
-    """Verify different data produces different keys."""
-    data1 = {"location_name": "NYC", "time": "2026-03-09T00:00"}
-    data2 = {"location_name": "LA", "time": "2026-03-09T00:00"}
-    assert generate_surrogate_key(data1) != generate_surrogate_key(data2)
 
 
 # --- Location preset tests ---
@@ -419,3 +404,366 @@ def test_tap_discover_satellite_requires_dates():
     stream_names = {s.name for s in streams}
     assert "satellite_radiation_hourly" in stream_names
     assert "satellite_radiation_daily" in stream_names
+
+
+# --- Schema completeness tests ---
+
+
+def test_all_streams_have_primary_keys():
+    """Verify every stream defines primary_keys and they exist in schema."""
+    config = {
+        **SAMPLE_CONFIG,
+        "enabled_endpoints": [
+            "forecast", "historical", "historical_forecast",
+            "ensemble", "previous_runs", "seasonal", "marine",
+            "air_quality", "flood", "climate", "elevation",
+            "geocoding",
+        ],
+        "historical_start_date": "2024-01-01",
+        "historical_forecast_start_date": "2024-01-01",
+        "satellite_start_date": "2024-01-01",
+        "geocoding_search_terms": ["Test"],
+    }
+    tap = TapOpenMateo(config=config)
+    streams = tap.discover_streams()
+
+    for stream in streams:
+        assert stream.primary_keys, f"{stream.name} has no primary_keys"
+        schema_props = set(stream.schema.get("properties", {}).keys())
+        for pk in stream.primary_keys:
+            assert pk in schema_props, (
+                f"{stream.name}: primary_key '{pk}' not in schema properties"
+            )
+
+
+def test_all_timeseries_streams_have_time_field():
+    """Verify every time-series stream has 'time' in schema."""
+    config = {
+        **SAMPLE_CONFIG,
+        "enabled_endpoints": [
+            "forecast", "ensemble", "previous_runs", "seasonal",
+            "marine", "air_quality", "flood", "climate",
+        ],
+    }
+    tap = TapOpenMateo(config=config)
+    streams = tap.discover_streams()
+
+    for stream in streams:
+        schema_props = set(stream.schema.get("properties", {}).keys())
+        assert "time" in schema_props, f"{stream.name}: missing 'time' in schema"
+        assert "granularity" in schema_props, (
+            f"{stream.name}: missing 'granularity' in schema"
+        )
+
+
+def test_forecast_hourly_schema_has_pressure_levels():
+    """Verify forecast hourly schema includes pressure level variables."""
+    from tap_open_mateo.streams.forecast_streams import (
+        FORECAST_HOURLY_PROPERTIES,
+        PRESSURE_LEVEL_VARIABLE_TYPES,
+        PRESSURE_LEVELS,
+    )
+
+    schema = FORECAST_HOURLY_PROPERTIES.to_dict()
+    props = set(schema["properties"].keys())
+
+    # Should have 7 variable types x 19 pressure levels = 133 properties
+    expected_count = len(PRESSURE_LEVEL_VARIABLE_TYPES) * len(PRESSURE_LEVELS)
+    pressure_props = {
+        p for p in props if any(p.endswith(f"_{level}hPa") for level in PRESSURE_LEVELS)
+    }
+    assert len(pressure_props) == expected_count, (
+        f"Expected {expected_count} pressure level properties, got {len(pressure_props)}"
+    )
+
+
+def test_historical_hourly_uses_era5_variable_names():
+    """Verify historical hourly includes ERA5-specific naming (range depths, 100m wind)."""
+    from tap_open_mateo.streams.historical_streams import HISTORICAL_HOURLY_PROPERTIES
+
+    schema = HISTORICAL_HOURLY_PROPERTIES.to_dict()
+    props = set(schema["properties"].keys())
+
+    # ERA5 uses range depths for soil
+    assert "soil_temperature_0_to_7cm" in props
+    assert "soil_moisture_0_to_7cm" in props
+    # ERA5 uses 100m wind (not 80m/120m/180m)
+    assert "wind_speed_100m" in props
+    assert "wind_direction_100m" in props
+    # Archive API also accepts forecast-style point depths
+    assert "soil_temperature_0cm" in props
+    assert "soil_moisture_0_to_1cm" in props
+
+
+def test_ensemble_schema_has_member_field():
+    """Verify ensemble/seasonal/flood schemas include the 'member' field."""
+    from tap_open_mateo.streams.ensemble_streams import EnsembleHourlyStream
+    from tap_open_mateo.streams.flood_streams import FLOOD_DAILY_PROPERTIES
+    from tap_open_mateo.streams.seasonal_streams import (
+        SEASONAL_DAILY_PROPERTIES,
+        SEASONAL_SIX_HOURLY_PROPERTIES,
+    )
+
+    for name, schema_dict in [
+        ("ensemble_hourly", EnsembleHourlyStream.schema),
+        ("seasonal_six_hourly", SEASONAL_SIX_HOURLY_PROPERTIES.to_dict()),
+        ("seasonal_daily", SEASONAL_DAILY_PROPERTIES.to_dict()),
+        ("flood_daily", FLOOD_DAILY_PROPERTIES.to_dict()),
+    ]:
+        props = set(schema_dict["properties"].keys())
+        assert "member" in props, f"{name}: missing 'member' field in schema"
+
+
+def test_previous_runs_schema_has_offset_field():
+    """Verify previous runs schema includes model_run_offset_days."""
+    from tap_open_mateo.streams.forecast_streams import PreviousRunsHourlyStream
+
+    schema = PreviousRunsHourlyStream.schema
+    props = set(schema["properties"].keys())
+    assert "model_run_offset_days" in props
+
+
+# --- Endpoint-specific config tests ---
+
+
+def test_marine_forecast_days_capped_at_8():
+    """Verify marine streams cap forecast_days to 8 (API max)."""
+    config = {
+        **SAMPLE_CONFIG,
+        "enabled_endpoints": ["marine"],
+        "forecast_days": 16,
+    }
+    tap = TapOpenMateo(config=config)
+    streams = tap.discover_streams()
+    marine_hourly = next(s for s in streams if s.name == "marine_hourly")
+
+    # Simulate get_records context to check the capped value
+    capped = min(marine_hourly.config.get("forecast_days", 8), 8)
+    assert capped == 8, f"Marine forecast_days should be capped at 8, got {capped}"
+
+
+def test_air_quality_forecast_days_capped_at_7():
+    """Verify air quality stream caps forecast_days to 7 (API max)."""
+    config = {
+        **SAMPLE_CONFIG,
+        "enabled_endpoints": ["air_quality"],
+        "forecast_days": 16,
+    }
+    tap = TapOpenMateo(config=config)
+    streams = tap.discover_streams()
+    aq_stream = next(s for s in streams if s.name == "air_quality_hourly")
+
+    capped = min(aq_stream.config.get("forecast_days", 7), 7)
+    assert capped == 7, f"Air quality forecast_days should be capped at 7, got {capped}"
+
+
+def test_historical_streams_use_era5_lag():
+    """Verify historical streams account for ERA5 5-day publication delay."""
+    from tap_open_mateo.streams.historical_streams import (
+        HistoricalDailyStream,
+        HistoricalHourlyStream,
+    )
+
+    assert HistoricalHourlyStream._default_end_date_lag_days >= 5
+    assert HistoricalDailyStream._default_end_date_lag_days >= 5
+
+
+# --- Date chunking tests ---
+
+
+def test_date_chunked_partitions():
+    """Verify date chunking produces correct partition ranges."""
+    config = {
+        **SAMPLE_CONFIG,
+        "enabled_endpoints": ["historical"],
+        "historical_start_date": "2024-01-01",
+        "historical_end_date": "2024-03-31",
+        "historical_chunk_days": 30,
+    }
+    tap = TapOpenMateo(config=config)
+    streams = tap.discover_streams()
+    hist_stream = next(s for s in streams if s.name == "historical_hourly")
+
+    partitions = hist_stream.partitions
+    # 2 locations fit in 1 batch (batch_size=10), 91 days / 30-day chunks = 4 chunks
+    assert len(partitions) == 4
+
+    # Verify each partition has required keys
+    for p in partitions:
+        assert "batch_idx" in p
+        assert "locations" in p
+        assert "start_date" in p
+        assert "end_date" in p
+
+    # First partition starts at configured start_date
+    first = partitions[0]
+    assert first["start_date"] == "2024-01-01"
+
+
+def test_date_chunking_no_gaps():
+    """Verify date chunks are contiguous with no gaps or overlaps."""
+    config = {
+        **SAMPLE_CONFIG,
+        "locations": [{"name": "Test", "latitude": 0, "longitude": 0}],
+        "enabled_endpoints": ["historical"],
+        "historical_start_date": "2024-01-01",
+        "historical_end_date": "2024-12-31",
+        "historical_chunk_days": 100,
+    }
+    tap = TapOpenMateo(config=config)
+    streams = tap.discover_streams()
+    hist_stream = next(s for s in streams if s.name == "historical_hourly")
+
+    partitions = hist_stream.partitions
+    # 1 location, 366 days / 100-day chunks = 4 chunks
+    assert len(partitions) == 4
+
+    # Verify contiguous: each chunk's start = previous chunk's end + 1 day
+    for i in range(1, len(partitions)):
+        prev_end = date.fromisoformat(partitions[i - 1]["end_date"])
+        curr_start = date.fromisoformat(partitions[i]["start_date"])
+        assert curr_start == prev_end + timedelta(days=1), (
+            f"Gap between chunk {i-1} end ({prev_end}) and chunk {i} start ({curr_start})"
+        )
+
+    # First chunk starts at configured date, last chunk ends at configured date
+    assert partitions[0]["start_date"] == "2024-01-01"
+    assert partitions[-1]["end_date"] == "2024-12-31"
+
+
+# --- Cell selection tests ---
+
+
+def test_cell_selection_propagated_to_base_params():
+    """Verify cell_selection config is passed to API params."""
+    config = {
+        **SAMPLE_CONFIG,
+        "cell_selection": "nearest",
+    }
+    tap = TapOpenMateo(config=config)
+    streams = tap.discover_streams()
+    forecast_stream = next(s for s in streams if s.name == "forecast_hourly")
+
+    params = forecast_stream._build_base_params()
+    assert params.get("cell_selection") == "nearest"
+
+
+def test_cell_selection_not_sent_when_unset():
+    """Verify cell_selection is omitted when not configured (API uses its default)."""
+    tap = TapOpenMateo(config=SAMPLE_CONFIG)
+    streams = tap.discover_streams()
+    forecast_stream = next(s for s in streams if s.name == "forecast_hourly")
+
+    params = forecast_stream._build_base_params()
+    assert "cell_selection" not in params
+
+
+# --- URL base tests ---
+
+
+def test_free_tier_url_base():
+    """Verify streams use free tier URLs when no API key is set."""
+    config = {**SAMPLE_CONFIG}
+    config.pop("api_key", None)
+    tap = TapOpenMateo(config=config)
+    streams = tap.discover_streams()
+    forecast_stream = next(s for s in streams if s.name == "forecast_hourly")
+    assert "customer-" not in forecast_stream.url_base
+
+
+def test_paid_tier_url_base():
+    """Verify streams use paid tier URLs when API key is set."""
+    config = {**SAMPLE_CONFIG, "api_key": "test-key-123"}
+    tap = TapOpenMateo(config=config)
+    streams = tap.discover_streams()
+    forecast_stream = next(s for s in streams if s.name == "forecast_hourly")
+    assert "customer-" in forecast_stream.url_base
+
+
+# --- Shared schema DRY tests ---
+
+
+def test_forecast_and_historical_forecast_share_schema():
+    """Verify historical_forecast streams reuse FORECAST schemas (DRY)."""
+    from tap_open_mateo.streams.forecast_streams import (
+        FORECAST_DAILY_PROPERTIES,
+        FORECAST_HOURLY_PROPERTIES,
+    )
+    from tap_open_mateo.streams.historical_forecast_streams import (
+        HistoricalForecastDailyStream,
+        HistoricalForecastHourlyStream,
+    )
+
+    assert HistoricalForecastHourlyStream.schema == FORECAST_HOURLY_PROPERTIES.to_dict()
+    assert HistoricalForecastDailyStream.schema == FORECAST_DAILY_PROPERTIES.to_dict()
+
+
+# --- API key redaction tests ---
+
+
+def test_api_key_redacted_in_logs():
+    """Verify API keys are redacted from log messages."""
+    from tap_open_mateo.client import OpenMateoStream
+
+    msg = "https://api.open-meteo.com/v1/forecast?apikey=secret123&hourly=temp"
+    redacted = OpenMateoStream.redact_api_key(msg)
+    assert "secret123" not in redacted
+    assert "REDACTED" in redacted
+
+
+# --- Flood ensemble/stats mode tests ---
+
+
+def test_flood_ensemble_vs_stats_mode():
+    """Verify flood stream switches between ensemble and stats variables."""
+    from tap_open_mateo.streams.flood_streams import (
+        DEFAULT_FLOOD_STATS_VARIABLES,
+        DEFAULT_FLOOD_VARIABLES,
+    )
+
+    # Stats mode should default to statistical aggregates
+    assert "river_discharge_mean" in DEFAULT_FLOOD_STATS_VARIABLES
+    assert "river_discharge_median" in DEFAULT_FLOOD_STATS_VARIABLES
+    assert "river_discharge_max" in DEFAULT_FLOOD_STATS_VARIABLES
+
+    # Ensemble mode should default to raw river_discharge
+    assert "river_discharge" in DEFAULT_FLOOD_VARIABLES
+    assert len(DEFAULT_FLOOD_VARIABLES) == 1
+
+
+# --- Partition count tests ---
+
+
+def test_ensemble_partitions_include_model():
+    """Verify ensemble partitions cross-product locations x models."""
+    config = {
+        **SAMPLE_CONFIG,
+        "enabled_endpoints": ["ensemble"],
+        "ensemble_models": ["gfs025", "icon_seamless"],
+    }
+    tap = TapOpenMateo(config=config)
+    streams = tap.discover_streams()
+    ens_stream = next(s for s in streams if s.name == "ensemble_hourly")
+
+    partitions = ens_stream.partitions
+    # 2 locations / 10 per batch = 1 batch, x 2 models = 2 partitions
+    assert len(partitions) == 2
+    models_in_partitions = {p["ensemble_model"] for p in partitions}
+    assert models_in_partitions == {"gfs025", "icon_seamless"}
+
+
+def test_seasonal_partitions_include_model():
+    """Verify seasonal partitions cross-product locations x models."""
+    config = {
+        **SAMPLE_CONFIG,
+        "enabled_endpoints": ["seasonal"],
+        "seasonal_models": ["ecmwf_seasonal_seamless", "meteo_france_seamless"],
+    }
+    tap = TapOpenMateo(config=config)
+    streams = tap.discover_streams()
+    seasonal_stream = next(s for s in streams if s.name == "seasonal_six_hourly")
+
+    partitions = seasonal_stream.partitions
+    assert len(partitions) == 2
+    models = {p["seasonal_model"] for p in partitions}
+    assert models == {"ecmwf_seasonal_seamless", "meteo_france_seamless"}

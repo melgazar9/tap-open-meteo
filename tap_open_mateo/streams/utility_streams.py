@@ -28,15 +28,19 @@ GEOCODING_PROPERTIES = th.PropertiesList(
     th.Property("elevation", th.NumberType),
     th.Property("feature_code", th.StringType),
     th.Property("country_code", th.StringType),
+    th.Property("country_id", th.IntegerType),
     th.Property("country", th.StringType),
     th.Property("timezone", th.StringType),
     th.Property("population", th.IntegerType),
+    th.Property("admin1_id", th.IntegerType),
     th.Property("admin1", th.StringType),
+    th.Property("admin2_id", th.IntegerType),
     th.Property("admin2", th.StringType),
+    th.Property("admin3_id", th.IntegerType),
     th.Property("admin3", th.StringType),
+    th.Property("admin4_id", th.IntegerType),
     th.Property("admin4", th.StringType),
     th.Property("postcodes", th.ArrayType(th.StringType)),
-    th.Property("surrogate_key", th.StringType),
 )
 
 ELEVATION_PROPERTIES = th.PropertiesList(
@@ -44,7 +48,6 @@ ELEVATION_PROPERTIES = th.PropertiesList(
     th.Property("latitude", th.NumberType, required=True),
     th.Property("longitude", th.NumberType, required=True),
     th.Property("elevation", th.NumberType, required=True),
-    th.Property("surrogate_key", th.StringType),
 )
 
 

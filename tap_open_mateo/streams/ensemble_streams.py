@@ -40,26 +40,74 @@ class EnsembleHourlyStream(OpenMateoStream):
         th.Property("member", th.IntegerType, required=True),
         th.Property("time", th.DateTimeType, required=True),
         th.Property("granularity", th.StringType, required=True),
+        # Temperature & humidity
         th.Property("temperature_2m", th.NumberType),
         th.Property("relative_humidity_2m", th.NumberType),
         th.Property("dew_point_2m", th.NumberType),
         th.Property("apparent_temperature", th.NumberType),
-        th.Property("wind_speed_10m", th.NumberType),
-        th.Property("wind_direction_10m", th.NumberType),
-        th.Property("wind_gusts_10m", th.NumberType),
+        # Precipitation
         th.Property("precipitation", th.NumberType),
         th.Property("rain", th.NumberType),
         th.Property("snowfall", th.NumberType),
         th.Property("snow_depth", th.NumberType),
+        # Pressure
         th.Property("pressure_msl", th.NumberType),
         th.Property("surface_pressure", th.NumberType),
+        # Wind (10m)
+        th.Property("wind_speed_10m", th.NumberType),
+        th.Property("wind_direction_10m", th.NumberType),
+        th.Property("wind_gusts_10m", th.NumberType),
+        # Wind (upper levels)
+        th.Property("wind_speed_80m", th.NumberType),
+        th.Property("wind_speed_100m", th.NumberType),
+        th.Property("wind_speed_120m", th.NumberType),
+        th.Property("wind_direction_80m", th.NumberType),
+        th.Property("wind_direction_100m", th.NumberType),
+        th.Property("wind_direction_120m", th.NumberType),
+        # Cloud & visibility
         th.Property("cloud_cover", th.NumberType),
         th.Property("visibility", th.NumberType),
-        th.Property("cape", th.NumberType),
         th.Property("weather_code", th.IntegerType),
+        th.Property("is_day", th.IntegerType),
+        # Solar radiation
         th.Property("shortwave_radiation", th.NumberType),
+        th.Property("direct_radiation", th.NumberType),
+        th.Property("direct_normal_irradiance", th.NumberType),
+        th.Property("diffuse_radiation", th.NumberType),
+        th.Property("global_tilted_irradiance", th.NumberType),
         th.Property("sunshine_duration", th.NumberType),
-        th.Property("surrogate_key", th.StringType),
+        # Surface & soil (point depths — from default hourly_variables)
+        th.Property("soil_temperature_0cm", th.NumberType),
+        th.Property("soil_moisture_0_to_1cm", th.NumberType),
+        # Surface & soil (range depths)
+        th.Property("surface_temperature", th.NumberType),
+        th.Property("soil_temperature_0_to_10cm", th.NumberType),
+        th.Property("soil_temperature_10_to_40cm", th.NumberType),
+        th.Property("soil_temperature_40_to_100cm", th.NumberType),
+        th.Property("soil_temperature_100_to_200cm", th.NumberType),
+        th.Property("soil_moisture_0_to_10cm", th.NumberType),
+        th.Property("soil_moisture_10_to_40cm", th.NumberType),
+        th.Property("soil_moisture_40_to_100cm", th.NumberType),
+        th.Property("soil_moisture_100_to_200cm", th.NumberType),
+        # Temperature (upper levels)
+        th.Property("temperature_80m", th.NumberType),
+        th.Property("temperature_120m", th.NumberType),
+        # Precipitation (additional)
+        th.Property("snowfall_water_equivalent", th.NumberType),
+        th.Property("snow_depth_water_equivalent", th.NumberType),
+        th.Property("snowfall_height", th.NumberType),
+        # Humidity (additional)
+        th.Property("wet_bulb_temperature_2m", th.NumberType),
+        # Atmospheric
+        th.Property("cape", th.NumberType),
+        th.Property("convective_inhibition", th.NumberType),
+        th.Property("vapour_pressure_deficit", th.NumberType),
+        th.Property("evapotranspiration", th.NumberType),
+        th.Property("et0_fao_evapotranspiration", th.NumberType),
+        th.Property("freezing_level_height", th.NumberType),
+        # UV
+        th.Property("uv_index", th.NumberType),
+        th.Property("uv_index_clear_sky", th.NumberType),
     ).to_dict()
 
     @property

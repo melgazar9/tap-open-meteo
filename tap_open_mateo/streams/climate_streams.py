@@ -51,6 +51,7 @@ class ClimateDailyStream(OpenMateoStream):
         th.Property("location_name", th.StringType, required=True),
         th.Property("latitude", th.NumberType, required=True),
         th.Property("longitude", th.NumberType, required=True),
+        th.Property("elevation", th.NumberType),
         th.Property("model", th.StringType, required=True),
         th.Property("time", th.DateTimeType, required=True),
         th.Property("granularity", th.StringType, required=True),
@@ -69,7 +70,6 @@ class ClimateDailyStream(OpenMateoStream):
         th.Property("relative_humidity_2m_mean", th.NumberType),
         th.Property("shortwave_radiation_sum", th.NumberType),
         th.Property("soil_moisture_0_to_10cm_mean", th.NumberType),
-        th.Property("surrogate_key", th.StringType),
     ).to_dict()
 
     @property

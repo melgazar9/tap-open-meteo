@@ -1,0 +1,146 @@
+[
+  {
+    "name": "Forecast Hourly (regular vars)",
+    "status": "ok",
+    "n_schema_vars": 75,
+    "n_api_base_vars": 75,
+    "in_schema_not_api": [],
+    "in_api_not_schema": []
+  },
+  {
+    "name": "Forecast Hourly (pressure level sample)",
+    "status": "ok",
+    "n_schema_vars": 20,
+    "n_api_base_vars": 20,
+    "in_schema_not_api": [],
+    "in_api_not_schema": []
+  },
+  {
+    "name": "Forecast Daily",
+    "status": "ok",
+    "n_schema_vars": 60,
+    "n_api_base_vars": 60,
+    "in_schema_not_api": [],
+    "in_api_not_schema": []
+  },
+  {
+    "name": "Historical Hourly (ERA5)",
+    "status": "ok",
+    "n_schema_vars": 49,
+    "n_api_base_vars": 49,
+    "in_schema_not_api": [],
+    "in_api_not_schema": []
+  },
+  {
+    "name": "Historical Daily (ERA5)",
+    "status": "ok",
+    "n_schema_vars": 18,
+    "n_api_base_vars": 18,
+    "in_schema_not_api": [],
+    "in_api_not_schema": []
+  },
+  {
+    "name": "Historical Forecast Hourly",
+    "status": "ok",
+    "n_schema_vars": 75,
+    "n_api_base_vars": 75,
+    "in_schema_not_api": [],
+    "in_api_not_schema": []
+  },
+  {
+    "name": "Historical Forecast Daily",
+    "status": "ok",
+    "n_schema_vars": 60,
+    "n_api_base_vars": 60,
+    "in_schema_not_api": [],
+    "in_api_not_schema": []
+  },
+  {
+    "name": "Previous Runs Hourly",
+    "status": "ok",
+    "n_schema_vars": 75,
+    "n_api_base_vars": 75,
+    "in_schema_not_api": [],
+    "in_api_not_schema": []
+  },
+  {
+    "name": "Ensemble Hourly",
+    "status": "ok",
+    "n_schema_vars": 52,
+    "n_api_base_vars": 52,
+    "in_schema_not_api": [],
+    "in_api_not_schema": []
+  },
+  {
+    "name": "Marine Hourly",
+    "status": "ok",
+    "n_schema_vars": 23,
+    "n_api_base_vars": 23,
+    "in_schema_not_api": [],
+    "in_api_not_schema": []
+  },
+  {
+    "name": "Marine Daily",
+    "status": "ok",
+    "n_schema_vars": 11,
+    "n_api_base_vars": 11,
+    "in_schema_not_api": [],
+    "in_api_not_schema": []
+  },
+  {
+    "name": "Air Quality Hourly",
+    "status": "ok",
+    "n_schema_vars": 42,
+    "n_api_base_vars": 42,
+    "in_schema_not_api": [],
+    "in_api_not_schema": []
+  },
+  {
+    "name": "Satellite Hourly",
+    "status": "ok",
+    "n_schema_vars": 16,
+    "n_api_base_vars": 16,
+    "in_schema_not_api": [],
+    "in_api_not_schema": []
+  },
+  {
+    "name": "Satellite Daily",
+    "status": "ok",
+    "n_schema_vars": 5,
+    "n_api_base_vars": 5,
+    "in_schema_not_api": [],
+    "in_api_not_schema": []
+  },
+  {
+    "name": "Flood Daily (stats)",
+    "status": "ok",
+    "n_schema_vars": 6,
+    "n_api_base_vars": 6,
+    "in_schema_not_api": [],
+    "in_api_not_schema": []
+  },
+  {
+    "name": "Climate Daily",
+    "status": "ok",
+    "n_schema_vars": 15,
+    "n_api_base_vars": 15,
+    "in_schema_not_api": [],
+    "in_api_not_schema": []
+  },
+  {
+    "name": "Seasonal Six-Hourly",
+    "status": "ok",
+    "n_schema_vars": 37,
+    "n_api_base_vars": 37,
+    "in_schema_not_api": [],
+    "in_api_not_schema": []
+  },
+  {
+    "name": "Seasonal Daily",
+    "status": "ok",
+    "n_schema_vars": 62,
+    "n_api_base_vars": 62,
+    "in_schema_not_api": [],
+    "in_api_not_schema": []
+  }
+]

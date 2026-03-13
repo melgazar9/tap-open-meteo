@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import uuid
 
 
 def clean_strings(string: str) -> str:
@@ -31,12 +30,6 @@ def clean_json_keys(data: object) -> object:
     if isinstance(data, list):
         return [clean_json_keys(item) for item in data]
     return data
-
-
-def generate_surrogate_key(data: dict, namespace: uuid.UUID = uuid.NAMESPACE_DNS) -> str:
-    """Generate a surrogate key from record data using UUID5."""
-    key_string = "|".join(str(data.get(field, "")) for field in sorted(data.keys()))
-    return str(uuid.uuid5(namespace, key_string))
 
 
 def _extract_var_value(section_data: dict, col_key: str, idx: int) -> object:

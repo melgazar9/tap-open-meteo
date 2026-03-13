@@ -48,7 +48,6 @@ MARINE_HOURLY_PROPERTIES = th.PropertiesList(
     th.Property("sea_surface_temperature", th.NumberType),
     th.Property("sea_level_height_msl", th.NumberType),
     th.Property("invert_barometer_height", th.NumberType),
-    th.Property("surrogate_key", th.StringType),
 )
 
 MARINE_DAILY_PROPERTIES = th.PropertiesList(
@@ -69,7 +68,7 @@ MARINE_DAILY_PROPERTIES = th.PropertiesList(
     th.Property("swell_wave_height_max", th.NumberType),
     th.Property("swell_wave_direction_dominant", th.NumberType),
     th.Property("swell_wave_period_max", th.NumberType),
-    th.Property("surrogate_key", th.StringType),
+    th.Property("swell_wave_peak_period_max", th.NumberType),
 )
 
 DEFAULT_MARINE_HOURLY_VARIABLES = [
@@ -95,20 +94,14 @@ DEFAULT_MARINE_DAILY_VARIABLES = [
 ]
 
 
-class MarineHourlyStream(OpenMateoStream):
-    """Marine and ocean forecast data at hourly resolution.
+class _MarineBaseStream(OpenMateoStream):
+    """Shared config for marine hourly and daily streams."""
 
-    Uses length_unit instead of weather-specific unit parameters.
-    Provides wave, swell, ocean current, and sea surface data.
-    """
-
-    name = "marine_hourly"
     path = "/v1/marine"
     _free_url_base = "https://marine-api.open-meteo.com"
     _paid_url_base = "https://customer-marine-api.open-meteo.com"
     primary_keys = ("location_name", "model", "time", "granularity")
     replication_key = None
-    schema = MARINE_HOURLY_PROPERTIES.to_dict()
 
     def _build_base_params(self) -> dict:
         """Marine API uses length_unit, not weather unit params."""
@@ -117,9 +110,18 @@ class MarineHourlyStream(OpenMateoStream):
             "timezone": self.config.get("timezone", "America/Chicago"),
             "timeformat": "iso8601",
         }
-        if api_key := self.config.get("api_key"):
-            params["apikey"] = api_key
+        self._apply_optional_params(params)
         return params
+
+
+class MarineHourlyStream(_MarineBaseStream):
+    """Marine and ocean forecast data at hourly resolution.
+
+    Provides wave, swell, ocean current, and sea surface data.
+    """
+
+    name = "marine_hourly"
+    schema = MARINE_HOURLY_PROPERTIES.to_dict()
 
     @property
     def partitions(self) -> list[dict]:
@@ -134,7 +136,7 @@ class MarineHourlyStream(OpenMateoStream):
             "hourly": ",".join(
                 self.config.get("marine_hourly_variables", DEFAULT_MARINE_HOURLY_VARIABLES)
             ),
-            "forecast_days": str(self.config.get("forecast_days", 16)),
+            "forecast_days": str(min(self.config.get("forecast_days", 8), 8)),
             "past_days": str(self.config.get("past_days", 7)),
         }
 
@@ -142,30 +144,14 @@ class MarineHourlyStream(OpenMateoStream):
             yield from self._fetch_and_extract(locations, "hourly", model, extra)
 
 
-class MarineDailyStream(OpenMateoStream):
+class MarineDailyStream(_MarineBaseStream):
     """Marine and ocean forecast data at daily resolution.
 
     Daily aggregations of wave and ocean measurements.
     """
 
     name = "marine_daily"
-    path = "/v1/marine"
-    _free_url_base = "https://marine-api.open-meteo.com"
-    _paid_url_base = "https://customer-marine-api.open-meteo.com"
-    primary_keys = ("location_name", "model", "time", "granularity")
-    replication_key = None
     schema = MARINE_DAILY_PROPERTIES.to_dict()
-
-    def _build_base_params(self) -> dict:
-        """Marine API uses length_unit, not weather unit params."""
-        params: dict[str, str] = {
-            "length_unit": self.config.get("length_unit", "imperial"),
-            "timezone": self.config.get("timezone", "America/Chicago"),
-            "timeformat": "iso8601",
-        }
-        if api_key := self.config.get("api_key"):
-            params["apikey"] = api_key
-        return params
 
     @property
     def partitions(self) -> list[dict]:
@@ -180,7 +166,7 @@ class MarineDailyStream(OpenMateoStream):
             "daily": ",".join(
                 self.config.get("marine_daily_variables", DEFAULT_MARINE_DAILY_VARIABLES)
             ),
-            "forecast_days": str(self.config.get("forecast_days", 16)),
+            "forecast_days": str(min(self.config.get("forecast_days", 8), 8)),
             "past_days": str(self.config.get("past_days", 7)),
         }
 

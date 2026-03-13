@@ -40,9 +40,16 @@ AIR_QUALITY_HOURLY_PROPERTIES = th.PropertiesList(
     th.Property("formaldehyde", th.NumberType),
     th.Property("glyoxal", th.NumberType),
     th.Property("non_methane_volatile_organic_compounds", th.NumberType),
+    th.Property("nitrogen_monoxide", th.NumberType),
+    th.Property("peroxyacyl_nitrates", th.NumberType),
     # Aerosols and dust
     th.Property("aerosol_optical_depth", th.NumberType),
     th.Property("dust", th.NumberType),
+    th.Property("sea_salt_aerosol", th.NumberType),
+    th.Property("secondary_inorganic_aerosol", th.NumberType),
+    th.Property("residential_elementary_carbon", th.NumberType),
+    th.Property("total_elementary_carbon", th.NumberType),
+    th.Property("pm2_5_total_organic_matter", th.NumberType),
     # UV
     th.Property("uv_index", th.NumberType),
     th.Property("uv_index_clear_sky", th.NumberType),
@@ -68,7 +75,6 @@ AIR_QUALITY_HOURLY_PROPERTIES = th.PropertiesList(
     th.Property("us_aqi_ozone", th.NumberType),
     th.Property("us_aqi_sulphur_dioxide", th.NumberType),
     th.Property("us_aqi_carbon_monoxide", th.NumberType),
-    th.Property("surrogate_key", th.StringType),
 )
 
 DEFAULT_AIR_QUALITY_VARIABLES = [
@@ -110,8 +116,7 @@ class AirQualityHourlyStream(OpenMateoStream):
         domains = self.config.get("air_quality_domains", "auto")
         if domains != "auto":
             params["domains"] = domains
-        if api_key := self.config.get("api_key"):
-            params["apikey"] = api_key
+        self._apply_optional_params(params)
         return params
 
     @property
@@ -127,7 +132,7 @@ class AirQualityHourlyStream(OpenMateoStream):
             "hourly": ",".join(
                 self.config.get("air_quality_variables", DEFAULT_AIR_QUALITY_VARIABLES)
             ),
-            "forecast_days": str(self.config.get("forecast_days", 16)),
+            "forecast_days": str(min(self.config.get("forecast_days", 7), 7)),
             "past_days": str(self.config.get("past_days", 7)),
         }
 

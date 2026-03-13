@@ -214,6 +214,10 @@ plugins:
         kind: boolean
         description: If true, raise on API errors instead of skipping partitions.
 
+      - name: cell_selection
+        kind: string
+        description: "Grid cell selection: 'land' (default for weather), 'sea' (default for marine), 'nearest'. Controls which grid point is used for coordinates."
+
     select:
       - forecast_hourly.*
       - forecast_daily.*

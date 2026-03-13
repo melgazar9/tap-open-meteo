@@ -38,7 +38,6 @@ FLOOD_DAILY_PROPERTIES = th.PropertiesList(
     th.Property("river_discharge_min", th.NumberType),
     th.Property("river_discharge_p25", th.NumberType),
     th.Property("river_discharge_p75", th.NumberType),
-    th.Property("surrogate_key", th.StringType),
 )
 
 DEFAULT_FLOOD_VARIABLES = [
@@ -76,8 +75,7 @@ class FloodDailyStream(OpenMateoStream):
         params: dict[str, str] = {
             "timeformat": "iso8601",
         }
-        if api_key := self.config.get("api_key"):
-            params["apikey"] = api_key
+        self._apply_optional_params(params)
         return params
 
     @property
@@ -101,6 +99,7 @@ class FloodDailyStream(OpenMateoStream):
             **self._build_location_params(locations),
             "daily": ",".join(variables),
             "forecast_days": str(self.config.get("flood_forecast_days", 92)),
+            "past_days": str(self.config.get("past_days", 7)),
         }
 
         if use_ensemble:

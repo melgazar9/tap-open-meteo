@@ -432,6 +432,17 @@ class TapOpenMateo(Tap):
             default=False,
             description="If True, raise on API errors instead of skipping partitions.",
         ),
+        th.Property(
+            "cell_selection",
+            th.StringType,
+            description=(
+                "Grid cell selection method: 'land' (default for weather), "
+                "'sea' (default for marine), 'nearest'. "
+                "Controls which grid point the API uses for your coordinates. "
+                "'land' searches for a land cell with similar elevation "
+                "(may pick inland cell for coastal locations)."
+            ),
+        ),
     ).to_dict()
 
     def __init__(self, *args: t.Any, **kwargs: t.Any) -> None:
@@ -482,10 +493,103 @@ class TapOpenMateo(Tap):
             self.logger.info("Using %d configured locations", len(locations))
             return self._resolved_locations
 
+    def _validate_endpoint_compatibility(self, enabled: set[str]) -> None:
+        """Warn about known data gaps for the configured locations + endpoints.
+
+        Catches issues like satellite + North America, marine + inland cities,
+        flood + desert locations upfront rather than silently returning empty data.
+        """
+        locations = self.get_resolved_locations()
+
+        # Satellite API has no North America coverage (NASA GOES not integrated)
+        if "satellite" in enabled:
+            na_locs = [
+                loc["name"]
+                for loc in locations
+                if -170 < loc["longitude"] < -50 and 15 < loc["latitude"] < 72
+            ]
+            if na_locs:
+                self.logger.warning(
+                    "*** SATELLITE DATA GAP *** %d of %d locations are in North America, "
+                    "where satellite radiation data is NOT available (NASA GOES not yet "
+                    "integrated). Affected: %s. Data will be empty/zeroed.",
+                    len(na_locs),
+                    len(locations),
+                    na_locs[:10],
+                )
+
+        # Marine + inland locations will silently return data from distant ocean cells
+        if "marine" in enabled:
+            inland_locs = [
+                loc["name"]
+                for loc in locations
+                if loc["name"]
+                in {
+                    "Phoenix",
+                    "Denver",
+                    "Las Vegas",
+                    "Albuquerque",
+                    "Colorado Springs",
+                    "El Paso",
+                    "Tucson",
+                    "Mesa",
+                    "Oklahoma City",
+                    "Wichita",
+                    "Omaha",
+                    "Kansas City",
+                    "Indianapolis",
+                    "Columbus",
+                    "Nashville",
+                    "Memphis",
+                    "Louisville",
+                    "Raleigh",
+                    "Charlotte",
+                    "Atlanta",
+                    "Austin",
+                    "San Antonio",
+                    "Dallas",
+                    "Fort Worth",
+                    "Arlington TX",
+                    "Minneapolis",
+                    "Milwaukee",
+                    "Tulsa",
+                    "Fresno",
+                    "Sacramento",
+                    "San Jose",
+                    "Cushing OK",
+                    "Midland TX",
+                    "Appalachia",
+                    "Henry Hub",
+                }
+            ]
+            if inland_locs:
+                self.logger.warning(
+                    "*** MARINE DATA QUALITY *** %d locations are inland — marine API "
+                    "will return data from the nearest ocean grid cell (potentially "
+                    "hundreds of km away): %s",
+                    len(inland_locs),
+                    inland_locs[:10],
+                )
+
+        # Historical endpoint requires start_date
+        if "historical" in enabled and not self.config.get("historical_start_date"):
+            self.logger.warning(
+                "historical endpoint enabled but historical_start_date not set — "
+                "no historical data will be extracted."
+            )
+
+        # Seasonal ensemble member retention warning
+        if "seasonal" in enabled:
+            self.logger.info(
+                "Seasonal ensemble member data is retained for ~1 month by the API. "
+                "Run the tap at least monthly to avoid permanent data loss."
+            )
+
     @override
     def discover_streams(self) -> list:
         """Return a list of discovered streams based on enabled_endpoints config."""
         enabled = set(self.config.get("enabled_endpoints", []))
+        self._validate_endpoint_compatibility(enabled)
         streams: list = []
 
         if "forecast" in enabled:

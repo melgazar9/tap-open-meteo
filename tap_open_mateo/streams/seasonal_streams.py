@@ -29,22 +29,31 @@ SEASONAL_SIX_HOURLY_PROPERTIES = th.PropertiesList(
     th.Property("member", th.IntegerType, required=True),
     th.Property("time", th.DateTimeType, required=True),
     th.Property("granularity", th.StringType, required=True),
+    # Temperature & humidity
     th.Property("temperature_2m", th.NumberType),
+    th.Property("temperature_2m_max", th.NumberType),
+    th.Property("temperature_2m_min", th.NumberType),
     th.Property("relative_humidity_2m", th.NumberType),
     th.Property("dew_point_2m", th.NumberType),
     th.Property("apparent_temperature", th.NumberType),
+    # Pressure
     th.Property("pressure_msl", th.NumberType),
+    # Precipitation
     th.Property("precipitation", th.NumberType),
     th.Property("showers", th.NumberType),
     th.Property("snowfall", th.NumberType),
     th.Property("rain", th.NumberType),
     th.Property("weather_code", th.IntegerType),
     th.Property("cloud_cover", th.NumberType),
+    # Wind
     th.Property("wind_speed_10m", th.NumberType),
     th.Property("wind_speed_100m", th.NumberType),
+    th.Property("wind_speed_200m", th.NumberType),
     th.Property("wind_direction_10m", th.NumberType),
     th.Property("wind_direction_100m", th.NumberType),
+    th.Property("wind_direction_200m", th.NumberType),
     th.Property("wind_gusts_10m", th.NumberType),
+    # Soil
     th.Property("soil_temperature_0_to_7cm", th.NumberType),
     th.Property("soil_temperature_7_to_28cm", th.NumberType),
     th.Property("soil_temperature_28_to_100cm", th.NumberType),
@@ -53,16 +62,17 @@ SEASONAL_SIX_HOURLY_PROPERTIES = th.PropertiesList(
     th.Property("soil_moisture_7_to_28cm", th.NumberType),
     th.Property("soil_moisture_28_to_100cm", th.NumberType),
     th.Property("soil_moisture_100_to_255cm", th.NumberType),
+    # Solar & atmospheric
     th.Property("sunshine_duration", th.NumberType),
     th.Property("shortwave_radiation", th.NumberType),
     th.Property("vapour_pressure_deficit", th.NumberType),
     th.Property("et0_fao_evapotranspiration", th.NumberType),
+    # Marine
     th.Property("wave_height", th.NumberType),
     th.Property("wave_direction", th.NumberType),
     th.Property("wave_period", th.NumberType),
     th.Property("wave_peak_period", th.NumberType),
     th.Property("sea_surface_temperature", th.NumberType),
-    th.Property("surrogate_key", th.StringType),
 )
 
 SEASONAL_DAILY_PROPERTIES = th.PropertiesList(
@@ -74,34 +84,80 @@ SEASONAL_DAILY_PROPERTIES = th.PropertiesList(
     th.Property("member", th.IntegerType, required=True),
     th.Property("time", th.DateTimeType, required=True),
     th.Property("granularity", th.StringType, required=True),
+    # Temperature
     th.Property("temperature_2m_max", th.NumberType),
     th.Property("temperature_2m_min", th.NumberType),
     th.Property("temperature_2m_mean", th.NumberType),
     th.Property("apparent_temperature_max", th.NumberType),
     th.Property("apparent_temperature_min", th.NumberType),
     th.Property("apparent_temperature_mean", th.NumberType),
+    th.Property("wet_bulb_temperature_2m_max", th.NumberType),
+    th.Property("wet_bulb_temperature_2m_min", th.NumberType),
+    th.Property("wet_bulb_temperature_2m_mean", th.NumberType),
+    # Humidity
+    th.Property("relative_humidity_2m_max", th.NumberType),
+    th.Property("relative_humidity_2m_mean", th.NumberType),
+    th.Property("relative_humidity_2m_min", th.NumberType),
+    th.Property("dew_point_2m_max", th.NumberType),
+    th.Property("dew_point_2m_mean", th.NumberType),
+    th.Property("dew_point_2m_min", th.NumberType),
+    # Precipitation
     th.Property("precipitation_sum", th.NumberType),
     th.Property("rain_sum", th.NumberType),
     th.Property("showers_sum", th.NumberType),
     th.Property("snowfall_sum", th.NumberType),
+    th.Property("snowfall_water_equivalent_sum", th.NumberType),
     th.Property("weather_code", th.IntegerType),
+    # Pressure
+    th.Property("pressure_msl_max", th.NumberType),
     th.Property("pressure_msl_mean", th.NumberType),
+    th.Property("pressure_msl_min", th.NumberType),
+    th.Property("surface_pressure_max", th.NumberType),
+    th.Property("surface_pressure_mean", th.NumberType),
+    th.Property("surface_pressure_min", th.NumberType),
+    # Sea surface
+    th.Property("sea_surface_temperature_max", th.NumberType),
+    th.Property("sea_surface_temperature_mean", th.NumberType),
+    th.Property("sea_surface_temperature_min", th.NumberType),
+    # Cloud
+    th.Property("cloud_cover_max", th.NumberType),
     th.Property("cloud_cover_mean", th.NumberType),
-    th.Property("wind_speed_10m_max", th.NumberType),
-    th.Property("wind_gusts_10m_max", th.NumberType),
-    th.Property("wind_direction_10m_dominant", th.NumberType),
+    th.Property("cloud_cover_min", th.NumberType),
+    # Solar & evapotranspiration
     th.Property("shortwave_radiation_sum", th.NumberType),
     th.Property("et0_fao_evapotranspiration", th.NumberType),
     th.Property("sunshine_duration", th.NumberType),
     th.Property("sunrise", th.StringType),
     th.Property("sunset", th.StringType),
-    th.Property("daylight_duration", th.NumberType),
-    th.Property("wet_bulb_temperature_2m_max", th.NumberType),
-    th.Property("wet_bulb_temperature_2m_min", th.NumberType),
-    th.Property("wet_bulb_temperature_2m_mean", th.NumberType),
+    # Atmospheric
+    th.Property("vapour_pressure_deficit_max", th.NumberType),
+    # Wind 10m
+    th.Property("wind_speed_10m_max", th.NumberType),
+    th.Property("wind_speed_10m_mean", th.NumberType),
+    th.Property("wind_speed_10m_min", th.NumberType),
+    th.Property("wind_gusts_10m_max", th.NumberType),
+    th.Property("wind_gusts_10m_mean", th.NumberType),
+    th.Property("wind_gusts_10m_min", th.NumberType),
+    th.Property("wind_direction_10m_dominant", th.NumberType),
+    # Wind 100m
+    th.Property("wind_speed_100m_max", th.NumberType),
+    th.Property("wind_speed_100m_mean", th.NumberType),
+    th.Property("wind_speed_100m_min", th.NumberType),
+    th.Property("wind_direction_100m_dominant", th.NumberType),
+    # Wind 200m
+    th.Property("wind_speed_200m_max", th.NumberType),
+    th.Property("wind_speed_200m_mean", th.NumberType),
+    th.Property("wind_speed_200m_min", th.NumberType),
+    th.Property("wind_direction_200m_dominant", th.NumberType),
+    # Soil
     th.Property("soil_temperature_0_to_7cm_mean", th.NumberType),
+    th.Property("soil_temperature_7_to_28cm_mean", th.NumberType),
+    th.Property("soil_temperature_28_to_100cm_mean", th.NumberType),
+    th.Property("soil_temperature_100_to_255cm_mean", th.NumberType),
     th.Property("soil_moisture_0_to_7cm_mean", th.NumberType),
-    th.Property("surrogate_key", th.StringType),
+    th.Property("soil_moisture_7_to_28cm_mean", th.NumberType),
+    th.Property("soil_moisture_28_to_100cm_mean", th.NumberType),
+    th.Property("soil_moisture_100_to_255cm_mean", th.NumberType),
 )
 
 DEFAULT_SEASONAL_SIX_HOURLY_VARIABLES = [
@@ -125,22 +181,14 @@ DEFAULT_SEASONAL_DAILY_VARIABLES = [
 ]
 
 
-class SeasonalSixHourlyStream(OpenMateoStream):
-    """Seasonal ensemble forecast at 6-hourly resolution.
+class _SeasonalBaseStream(OpenMateoStream):
+    """Shared config for seasonal six-hourly and daily streams."""
 
-    The API parameter is 'hourly' but timestamps are 6 hours apart.
-    Records are labeled with granularity='six_hourly' to distinguish
-    from true hourly data. Ensemble member columns are normalized
-    into separate rows via pivot_ensemble_to_rows.
-    """
-
-    name = "seasonal_six_hourly"
     path = "/v1/seasonal"
     _free_url_base = "https://seasonal-api.open-meteo.com"
     _paid_url_base = "https://customer-seasonal-api.open-meteo.com"
     primary_keys = ("location_name", "model", "member", "time", "granularity")
     replication_key = None
-    schema = SEASONAL_SIX_HOURLY_PROPERTIES.to_dict()
 
     @property
     def partitions(self) -> list[dict]:
@@ -156,6 +204,19 @@ class SeasonalSixHourlyStream(OpenMateoStream):
             for (batch_idx, batch), model
             in itertools.product(enumerate(batches), seasonal_models)
         ]
+
+
+class SeasonalSixHourlyStream(_SeasonalBaseStream):
+    """Seasonal ensemble forecast at 6-hourly resolution.
+
+    The API parameter is 'hourly' but timestamps are 6 hours apart.
+    Records are labeled with granularity='six_hourly' to distinguish
+    from true hourly data. Ensemble member columns are normalized
+    into separate rows via pivot_ensemble_to_rows.
+    """
+
+    name = "seasonal_six_hourly"
+    schema = SEASONAL_SIX_HOURLY_PROPERTIES.to_dict()
 
     def get_records(self, context: Context | None) -> Iterable[dict]:
         if context is None:
@@ -199,7 +260,7 @@ class SeasonalSixHourlyStream(OpenMateoStream):
             )
 
 
-class SeasonalDailyStream(OpenMateoStream):
+class SeasonalDailyStream(_SeasonalBaseStream):
     """Seasonal ensemble forecast at daily resolution.
 
     Daily aggregations of the seasonal ensemble forecast.
@@ -207,27 +268,7 @@ class SeasonalDailyStream(OpenMateoStream):
     """
 
     name = "seasonal_daily"
-    path = "/v1/seasonal"
-    _free_url_base = "https://seasonal-api.open-meteo.com"
-    _paid_url_base = "https://customer-seasonal-api.open-meteo.com"
-    primary_keys = ("location_name", "model", "member", "time", "granularity")
-    replication_key = None
     schema = SEASONAL_DAILY_PROPERTIES.to_dict()
-
-    @property
-    def partitions(self) -> list[dict]:
-        """Generate partitions by (location_batch, seasonal_model)."""
-        batches = self._batch_locations(
-            self.get_resolved_locations(),
-            self.config.get("max_locations_per_request", 10),
-        )
-        seasonal_models = self.config.get("seasonal_models", ["ecmwf_seasonal_seamless"])
-
-        return [
-            {"batch_idx": batch_idx, "locations": batch, "seasonal_model": model}
-            for (batch_idx, batch), model
-            in itertools.product(enumerate(batches), seasonal_models)
-        ]
 
     def get_records(self, context: Context | None) -> Iterable[dict]:
         if context is None:
