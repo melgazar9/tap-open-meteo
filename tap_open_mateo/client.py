@@ -51,7 +51,7 @@ class OpenMateoStream(RESTStream, ABC):
         return self._paid_url_base if self.config.get("api_key") else self._free_url_base
 
     @property
-    def authenticator(self) -> None:
+    def authenticator(self) -> None:  # type: ignore[override]
         """Open-Meteo uses API key in query params, not headers."""
         return None
 
@@ -64,9 +64,9 @@ class OpenMateoStream(RESTStream, ABC):
         """Open-Meteo returns full time series in one response, no pagination."""
         return SinglePagePaginator()
 
-    def sync(self, context: t.Any = None) -> None:
-        """Sync stream with skipped-partition summary on completion."""
-        super().sync(context)
+    def finalize_state_progress_markers(self, state: dict | None = None) -> None:
+        """Log skipped-partition summary after sync completes."""
+        super().finalize_state_progress_markers(state)
         if self._skipped_partitions:
             logging.error(
                 "*** SKIPPED PARTITION SUMMARY *** Stream %s: %d partition(s) were skipped "
@@ -428,4 +428,4 @@ class OpenMateoStream(RESTStream, ABC):
 
     def get_resolved_locations(self) -> list[dict]:
         """Get resolved locations from tap's cached location data."""
-        return self._tap.get_resolved_locations()
+        return self._tap.get_resolved_locations()  # type: ignore[attr-defined]
