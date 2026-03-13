@@ -389,7 +389,7 @@ def test_tap_discover_geocoding():
 
 def test_tap_discover_satellite_requires_dates():
     """Verify satellite streams require start_date to be configured."""
-    config = {
+    config: dict = {
         **SAMPLE_CONFIG,
         "enabled_endpoints": ["satellite"],
     }

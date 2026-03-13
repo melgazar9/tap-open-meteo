@@ -26,7 +26,7 @@ def clean_strings(string: str) -> str:
 def clean_json_keys(data: object) -> object:
     """Recursively clean JSON keys to snake_case."""
     if isinstance(data, dict):
-        return {clean_strings(key): clean_json_keys(value) for key, value in data.items()}
+        return {clean_strings(str(key)): clean_json_keys(value) for key, value in data.items()}
     if isinstance(data, list):
         return [clean_json_keys(item) for item in data]
     return data
