@@ -1,7 +1,7 @@
-version: 1
 send_anonymous_usage_stats: false
 project_id: "tap-open-mateo"
 default_environment: test
+
 environments:
 - name: test
 
